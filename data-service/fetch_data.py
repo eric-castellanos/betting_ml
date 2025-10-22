@@ -2,20 +2,24 @@
 
 import requests
 import os
-from typing import Dict, Any
+from typing import Dict, List, Any
 
+import polars as pl
 
-def fetch_nfl_data(api_url: str, params: Dict[str, Any] = None) -> Dict:
-	"""
+def fetch_play_by_play_data(urls: List[str]) -> Dict[str, pl.DataFrame]:
+    """
 	Fetch NFL data from the given API URL.
 	Args:
-		api_url (str): The endpoint to fetch data from.
-		params (dict, optional): Query parameters for the API call.
+		url (str): The url to fetch data from.
 	Returns:
-		dict: The fetched data as a dictionary.
+        Dictionary of polars dataframes
 	"""
-	# TODO: Implement API call logic
-	pass
+    data_dict = {}
+
+    for index, url in enumerate(urls):
+        data_dict[str(index)] = url
+
+    return data_dict
 
 def save_data(data: Dict, filename: str) -> None:
 	"""
@@ -29,7 +33,7 @@ def save_data(data: Dict, filename: str) -> None:
 
 def main():
 	# TODO: Set your API URL and parameters
-	api_url = "https://example.com/nfl/data"  # Replace with actual NFL data API
+	api_url = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?regions=us&markets=totals,spreads,h2h&oddsFormat=american&apiKey=YOUR_API_KEY"  # Replace with actual NFL data API
 	params = {}
 	data = fetch_nfl_data(api_url, params)
 	save_data(data, "nfl_data.json")
