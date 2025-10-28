@@ -10,7 +10,4 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Build Docker image
-        uses: actions/docker@v2
         
