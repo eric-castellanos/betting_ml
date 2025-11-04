@@ -1,22 +1,25 @@
-# --- Build Stage ---
-FROM python:3.11-slim AS builder
+### --- Builder Stage --- ###
+FROM python:3.10-slim AS builder
 
 WORKDIR /app
+
+COPY ../../pyproject.toml ../../poetry.lock ./
 
 RUN pip install poetry
 
-COPY ../../pyproject.toml ../../poetry.lock* ./
-
+RUN poetry config virtualenvs.in-project true
 RUN poetry install --with fetch-data
 
-COPY ./fetch_data.py ./utils.py ./
-
-# --- Final Stage ---
-FROM python:3.11-slim
+### --- Final Stage --- ###
+FROM python:3.10-slim AS final
 
 WORKDIR /app
 
-# copy only installed pacakges and source code
-COPY --from=builder /app /app
+COPY --from=builder /app/.venv /app/.venv
+
+COPY ./fetch_data.py ./utils.py ./
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["python", "fetch_data.py"]
+
