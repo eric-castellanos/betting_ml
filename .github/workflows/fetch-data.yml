@@ -1,0 +1,22 @@
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/*
+      - fetch_data
+
+    schedule:
+      cron: '0 0 * * 3'
+
+jobs:
+  fetch_data:
+    runs_on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Build Docker image
+        run: docker build -f src/data-service/Dockerfile -t fetch-data .
+
+      - name: Run fetch-data container
+        run: docker run fetch-data
