@@ -3,7 +3,7 @@ FROM python:3.10-slim AS builder
 
 WORKDIR /app
 
-COPY ../../pyproject.toml ../../poetry.lock ./
+COPY ./pyproject.toml ./poetry.lock ./
 
 RUN pip install poetry
 
@@ -17,9 +17,9 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 
-COPY ./fetch_data.py ./utils.py ./
+COPY src/data_service/fetch_data.py src/data_service/utils.py ./
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["poetry", "run", "python", "-m", "fetch_data.py"]
+CMD ["python", "fetch_data.py", "--local", "True"]
 
