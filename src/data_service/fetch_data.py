@@ -8,7 +8,7 @@ from typing import Dict, List
 import polars as pl
 import click
 
-from src.data_service.utils import save_data
+from utils import save_data
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s")
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--local-path",
-    default="./data/raw",
+    default="../../data/raw",
     help="Local folder to save data before uploading to S3."
 )
 @click.option(
@@ -41,9 +41,40 @@ logger = logging.getLogger(__name__)
     default="raw-data",
     help="S3 prefix (folder) to upload data under."
 )
-def fetch_play_by_play_data(years: List[str], urls: List[str], local_path: str, bucket: str, key: str) -> Dict[str, pl.DataFrame]:
+@click.option(
+    "--local",
+    default=True,
+    help="Boolean flag to determine whether to save locally or to S3."
+)
+def fetch_play_by_play_data(years: List[str], urls: List[str], local_path: str, bucket: str, key: str, local: bool) -> Dict[str, pl.DataFrame]:
     """
-    Fetch NFL play-by-play data and save locally and to S3.
+    Fetch NFL play-by-play data for specified years from given URLs, save each year's data locally and/or upload to S3.
+
+    Args:
+        years (List[str]): List of years to fetch data for (e.g., ["2020", "2021"]).
+        urls (List[str]): List of URLs to download Parquet files from. If empty, defaults are built from years.
+        local_path (str): Local directory to save Parquet files.
+        bucket (str): S3 bucket name to upload files to.
+        key (str): S3 prefix (folder) to upload files under.
+        local (bool): If True, saves files locally in addition to S3 upload.
+
+    Returns:
+        Dict[str, pl.DataFrame]: Dictionary mapping year keys (e.g., "play_by_play_2020") to Polars DataFrames.
+
+    Raises:
+        ValueError: If input validation fails (e.g., mismatched years/urls, invalid year or URL).
+        OSError: If there is a network or file error when reading Parquet files.
+        Exception: For any other unexpected errors during data fetching or saving.
+
+    Example:
+        fetch_play_by_play_data(
+            years=["2020", "2021"],
+            urls=[],
+            local_path="../../data/raw",
+            bucket="sports-betting-ml",
+            key="raw-data",
+            local=True
+        )
     """
     # ✅ Build default URLs if none provided
     if not urls:
@@ -73,7 +104,7 @@ def fetch_play_by_play_data(years: List[str], urls: List[str], local_path: str, 
 
             # Save locally and to S3
             filename = f"{year}_pbp_data.parquet"
-            save_data(df, bucket=bucket, key=key, filename=filename, local=True, local_path=local_path)
+            save_data(df, bucket=bucket, key=key, filename=filename, local=local, local_path=local_path)
 
         except OSError as e:
             logger.error(f"Network or file error for {url}: {e}")
