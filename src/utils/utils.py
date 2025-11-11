@@ -84,3 +84,17 @@ def load_data(bucket: str, key: str) -> pl.DataFrame:
     except Exception as e:
         logger.error(f"Failed to load Parquet from s3://{bucket}/{key}: {e}")
         raise
+
+
+def polars_info(df: pl.DataFrame):
+    info = df.select([
+        pl.lit(df.height).alias("n_rows"),
+        pl.lit(df.width).alias("n_cols"),
+    ])
+    null_counts = df.null_count().transpose(include_header=True)
+    schema = pl.DataFrame({
+        "column": list(df.schema.keys()),
+        "dtype": [str(v) for v in df.schema.values()],
+        "nulls": [df[col].null_count() for col in df.columns],
+    })
+    return schema
