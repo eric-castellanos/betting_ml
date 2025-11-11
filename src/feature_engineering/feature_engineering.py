@@ -55,6 +55,10 @@ class RawPlayByPlaySchema(pa.DataFrameModel):
     temp: pl.Int32 = pa.Field(nullable=True, in_range={"min_value": -20, "max_value": 130})
     wind: pl.Int32 = pa.Field(nullable=True, in_range={"min_value": 0, "max_value": 60})
 
+    # --- Scores ---
+    home_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
+    away_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
+
 class TeamGameFeaturesSchema(pa.DataFrameModel):
     game_id: str
     posteam: str
@@ -97,73 +101,113 @@ class TeamGameFeaturesSchema(pa.DataFrameModel):
     # --- Red zone ---
     td_rate_in_redzone: pl.Float64 = pa.Field(in_range={"min_value": 0, "max_value": 1})
 
+    # --- Scores ---
+    final_home_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
+    final_away_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
+
+
+import polars as pl
+
 
 def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
-    # Pre-filter for subsets you need just once
-    pass_df = df.filter(pl.col("pass_attempt") == 1)
-    rush_df = df.filter(pl.col("rush_attempt") == 1)
-    redzone_df = df.filter(pl.col("yardline_100") <= 20)
+    """
+    Computes per-team, per-game feature aggregates efficiently.
+    Dynamically builds aggregations using lists for both standard
+    and conditional (filtered) aggregations.
+    """
 
-    # Base groupby
-    grouped = df.group_by(["game_id", "posteam"]).agg([
-        # --- Scoring & Efficiency ---
-        pl.col("epa").mean().alias("avg_epa"),
-        pl.col("epa").sum().alias("total_epa"),
-        pl.col("success").mean().alias("success_rate"),
+    # --- Simple mean aggregations ---
+    mean_cols = {
+        "epa": "avg_epa",
+        "success": "success_rate",
+        "drive_ended_with_score": "pct_drives_scored",
+        "drive_yards_penalized": "avg_drive_yards_penalized",
+    }
+    mean_aggs = [pl.col(c).mean().alias(a) for c, a in mean_cols.items()]
 
-        # --- Explosiveness ---
+    # --- Simple sum aggregations ---
+    sum_cols = {"epa": "total_epa", "penalty_yards": "penalty_yards_total"}
+    sum_aggs = [pl.col(c).sum().alias(a) for c, a in sum_cols.items()]
+
+    # --- Simple first aggregations (categorical/contextual) ---
+    first_cols = {
+        "posteam_type": "home_away_flag",
+        "roof": "roof_type",
+        "surface": "surface",
+        "temp": "temp",
+        "wind": "wind",
+    }
+    first_aggs = [pl.col(c).first().alias(a) for c, a in first_cols.items()]
+
+    max_cols = {
+        "home_score" : "final_home_score",
+        "away_score" : "final_away_score"
+    }
+    max_aggs = [pl.col(c).max().alias(a) for c,a in max_cols.items()]
+
+    # --- Conditional filters and their associated columns ---
+    # Each tuple: (filter_expression, [(column_name, alias_name), ...])
+    filters = [
+        # Passing plays
+        (
+            pl.col("pass_attempt") == 1,
+            [
+                ("epa", "pass_epa_mean"),
+                ("passing_yards", "pass_yards_avg"),
+                ("complete_pass", "comp_pct"),
+            ],
+        ),
+        # Rushing plays
+        (
+            pl.col("rush_attempt") == 1,
+            [
+                ("epa", "rush_epa_mean"),
+                ("rushing_yards", "rush_yards_avg"),
+            ],
+        ),
+        # Red zone plays
+        (
+            pl.col("yardline_100") <= 20,
+            [
+                ("touchdown", "td_rate_in_redzone"),
+            ],
+        ),
+    ]
+
+    # Build conditional aggregations dynamically
+    conditional_aggs = [
+        pl.when(condition).then(pl.col(col)).mean().alias(alias)
+        for condition, columns in filters
+        for col, alias in columns
+    ]
+
+    # --- Custom expressions that don’t fit the pattern ---
+    custom_aggs = [
+        # Explosiveness
         (pl.col("yards_gained") > 15).mean().alias("pct_plays_over_15yds"),
 
-        # --- Drive outcomes ---
-        pl.col("drive_ended_with_score").mean().alias("pct_drives_scored"),
-        pl.col("drive_yards_penalized").mean().alias("avg_drive_yards_penalized"),
-
-        # --- Turnovers & Penalties ---
+        # Turnovers
         (pl.col("interception") + pl.col("fumble_lost")).sum().alias("turnover_count"),
-        pl.col("penalty_yards").sum().alias("penalty_yards_total"),
 
-        # --- Down success ---
+        # Down success rate
         (
             (
                 pl.col("third_down_converted") + pl.col("fourth_down_converted")
-            ).sum() /
-            (
-                pl.col("third_down_converted") + pl.col("third_down_failed") +
-                pl.col("fourth_down_converted") + pl.col("fourth_down_failed")
+            ).sum()
+            / (
+                pl.col("third_down_converted")
+                + pl.col("third_down_failed")
+                + pl.col("fourth_down_converted")
+                + pl.col("fourth_down_failed")
             ).sum()
         ).alias("third_down_success_rate"),
+    ]
 
-        # --- Situational ---
-        pl.col("posteam_type").first().alias("home_away_flag"),
-        pl.col("roof").first().alias("roof_type"),
-        pl.col("surface").first().alias("surface"),
-        pl.col("temp").first().alias("temp"),
-        pl.col("wind").first().alias("wind"),
-    ])
+    # --- Combine all aggregations ---
+    aggs = mean_aggs + sum_aggs + first_aggs + max_aggs + conditional_aggs + custom_aggs
 
-    # --- Merge in specialized subsets (passing, rushing, redzone) ---
-    pass_stats = pass_df.group_by(["game_id", "posteam"]).agg([
-        pl.col("epa").mean().alias("pass_epa_mean"),
-        pl.col("passing_yards").mean().alias("pass_yards_avg"),
-        pl.col("complete_pass").mean().alias("comp_pct"),
-    ])
-
-    rush_stats = rush_df.group_by(["game_id", "posteam"]).agg([
-        pl.col("epa").mean().alias("rush_epa_mean"),
-        pl.col("rushing_yards").mean().alias("rush_yards_avg"),
-    ])
-
-    redzone_stats = redzone_df.group_by(["game_id", "posteam"]).agg([
-        pl.col("touchdown").mean().alias("td_rate_in_redzone"),
-    ])
-
-    # --- Merge them all together ---
-    result = (
-        grouped
-        .join(pass_stats, on=["game_id", "posteam"], how="left")
-        .join(rush_stats, on=["game_id", "posteam"], how="left")
-        .join(redzone_stats, on=["game_id", "posteam"], how="left")
-    )
+    # --- Single efficient groupby ---
+    result = df.group_by(["game_id", "posteam"]).agg(aggs)
 
     return result
 
