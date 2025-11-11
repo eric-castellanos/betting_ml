@@ -1,14 +1,12 @@
-import polars as pl
-
 import logging
 
-from src.utils.utils import save_data_s3, load_data_s3
+import polars as pl
+
+from src.utils.utils import save_data_s3, load_data_s3, polars_info
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level)s - %(message)s - %(lineno)d")
 
 logger = logging.getLogger(__name__)
-
-import polars as pl
 
 def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
     # Pre-filter for subsets you need just once
@@ -78,9 +76,12 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
         .join(redzone_stats, on=["game_id", "posteam"], how="left")
     )
 
+    logger.info(f"Data transformations succeeded. Summary statisitcs for dataframe: {result.describe()}")
+    logger.info(f"Info for the feature engineered dataset: {polars_info(result)}")
+
     return result
 
 if __name__ == "__main__":
     raw = load_data_s3("sports-betting-ml", "raw-data/2020_pbp_data.parquet")
     processed = compute_team_game_features(raw)
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
