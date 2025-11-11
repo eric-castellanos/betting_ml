@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 logger = logging.getLogger(__name__)
 
-def save_data(data: pl.DataFrame, bucket : str, key : str, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
+def save_data_s3(data: pl.DataFrame, bucket : str, key : str, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
     """
     Save data to S3 bucket. If local set to True, save data to a local parquet file.
     Args:
@@ -57,3 +57,30 @@ def save_data(data: pl.DataFrame, bucket : str, key : str, filename: Optional[st
         buffer.seek(0)
         logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
         s3_client.upload_fileobj(buffer, bucket, s3_key)
+
+def load_data_s3(bucket: str, key: str) -> Optional[pl.DataFrame]:
+    """
+    Load a Parquet file from S3 and return as a Polars DataFrame.
+    Args:
+        bucket (str): S3 bucket name.
+        key (str): S3 object key (path to the file).
+    Returns:
+        pl.DataFrame or None: Loaded DataFrame, or None if load fails.
+    Raises:
+        botocore.exceptions.ClientError: If S3 access fails.
+        OSError: If file cannot be read as Parquet.
+    """
+    s3_client = boto3.client("s3")
+    buffer = io.BytesIO()
+    try:
+        s3_client.download_fileobj(bucket, key, buffer)
+        buffer.seek(0)
+        df = pl.read_parquet(buffer)
+        logger.info(f"Loaded file from s3://{bucket}/{key}")
+        return df
+    except ClientError as e:
+        logger.error(f"Failed to download s3://{bucket}/{key}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to load Parquet from s3://{bucket}/{key}: {e}")
+        raise
