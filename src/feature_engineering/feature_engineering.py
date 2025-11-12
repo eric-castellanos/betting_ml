@@ -2,8 +2,9 @@ import logging
 
 import polars as pl
 import pandera.polars as pa
+import click
 
-from src.utils.utils import save_data_s3, load_data_s3, polars_info
+from utils import save_data, load_data, polars_info
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level)s - %(message)s - %(lineno)d")
 
@@ -105,11 +106,7 @@ class TeamGameFeaturesSchema(pa.DataFrameModel):
     final_home_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
     final_away_score: pl.Int32 = pa.Field(nullable=True, in_range={"min_value" : 0, "max_value" : 100})
 
-
-import polars as pl
-
-
-def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
+def compute_team_game_features(df : pl.DataFrame) -> pl.DataFrame:
     """
     Computes per-team, per-game feature aggregates efficiently.
     Dynamically builds aggregations using lists for both standard
@@ -211,7 +208,23 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
 
     return result
 
-def validate_df(raw : pl.DataFrame) -> pl.DataFrame:
+@click.command()
+@click.option(
+    "--local",
+    default=True,
+    help="Boolean flag to determine whether or not to load and save the processed dataframe locally"
+)
+@click.option(
+    "--filename",
+    default="2020_pbp_data.parquet",
+    help="Boolean flag to determine whether or not to load and save the processed dataframe locally"
+)
+def validate_df(local : bool, filename : str) -> None:
+     # read in data either locally or from S3, just use 2020 data now for development
+    if local:
+        raw = load_data(local=local, local_path="./data/raw", filename=filename)
+    else:
+        raw = load_data(bucket="sports-betting-ml", key=f"raw/{filename}")
     try:
         processed = compute_team_game_features(raw)
     except pa.errors.SchemaError as e:
@@ -225,12 +238,11 @@ def validate_df(raw : pl.DataFrame) -> pl.DataFrame:
         logger.info(f"Info for the feature engineered dataset: {polars_info(processed)}")
         logger.info("Feature engineering process complete.")
 
-    return processed
+    if local:
+        save_data(processed, filename="feature-engineered-2020.parquet", local=local, local_path="./data/processed")
+
+    else:
+        save_data(processed, bucket="sports-betting-ml", key="processed/feature-engineered-2020.parquet")
 
 if __name__ == "__main__":
-    ## Will use 2020 dataset for development only for now ##
-    raw = load_data_s3("sports-betting-ml", "raw-data/2020_pbp_data.parquet")
-    #import pdb; pdb.set_trace()
-    RawPlayByPlaySchema.validate(raw.lazy()).collect()
-    processed = validate_df(raw)
-    TeamGameFeaturesSchema.validate(processed.lazy()).collect()
+    validate_df()
