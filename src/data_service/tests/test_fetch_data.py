@@ -3,7 +3,7 @@ import pytest
 import polars as pl
 from unittest.mock import patch
 
-from src.data_service.fetch_data import fetch_play_by_play_data
+from src.data_service.fetch_data import fetch_play_by_play_data_logic
 
 @pytest.mark.parametrize(
     "years, urls, expected_keys",
@@ -26,7 +26,7 @@ from src.data_service.fetch_data import fetch_play_by_play_data
 def test_fetch_play_by_play_data_valid(years, urls, expected_keys):
     dummy_df = pl.DataFrame({"col1": [1, 2], "col2": [3, 4]})
     with patch("polars.read_parquet", return_value=dummy_df):
-        result = fetch_play_by_play_data(years, urls)
+        result = fetch_play_by_play_data_logic(years, urls)
         assert isinstance(result, dict)
         for key in expected_keys:
             assert key in result
@@ -44,7 +44,7 @@ def test_fetch_play_by_play_data_valid(years, urls, expected_keys):
 )
 def test_fetch_play_by_play_data_invalid(years, urls, exception, message):
     with pytest.raises(exception) as excinfo:
-        fetch_play_by_play_data(years, urls)
+        fetch_play_by_play_data_logic(years, urls)
     assert message in str(excinfo.value)
 
 def test_fetch_play_by_play_data_oserror():
@@ -53,6 +53,6 @@ def test_fetch_play_by_play_data_oserror():
         urls = ["http://valid-url.parquet"]
 
         with pytest.raises(OSError) as excinfo:
-            fetch_play_by_play_data(years, urls)
+            fetch_play_by_play_data_logic(years, urls)
 
         assert "Network or file error for http://valid-url.parquet" in str(excinfo.value)
