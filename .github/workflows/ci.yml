@@ -1,0 +1,19 @@
+on:
+  pull_request:
+    branches:
+      - "main"
+      - "feature/*"
+      - "feature_engineering"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+
+      - name: Run Unit Tests
+        uses: pytest src
