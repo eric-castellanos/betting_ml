@@ -17,7 +17,7 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 
-COPY src/data_service/fetch_data.py src/data_service/utils.py ./
+COPY src/data_service/fetch_data.py src/utils/utils.py ./
 
 ENV PATH="/app/.venv/bin:$PATH"
 
