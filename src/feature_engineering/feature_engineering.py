@@ -233,16 +233,16 @@ def validate_df(local : bool, filename : str) -> None:
         logger.error(f"Column not found: {e}")
     except ValueError as e:
         logger.error(f"Trying to perform invalid computation: {e}")
-    finally:
+    else:
         logger.info(f"Data transformations succeeded. Summary statisitcs for dataframe: {processed.describe()}")
         logger.info(f"Info for the feature engineered dataset: {polars_info(processed)}")
         logger.info("Feature engineering process complete.")
 
-    if local:
-        save_data(processed, filename="feature-engineered-2020.parquet", local=local, local_path="./data/processed")
+        if local:
+            save_data(processed, filename="feature-engineered-2020.parquet", local=local, local_path="./data/processed")
 
-    else:
-        save_data(processed, bucket="sports-betting-ml", key="processed/feature-engineered-2020.parquet")
+        else:
+            save_data(processed, bucket="sports-betting-ml", key="processed/feature-engineered-2020.parquet")
 
 if __name__ == "__main__":
     validate_df()
