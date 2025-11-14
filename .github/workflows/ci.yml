@@ -55,3 +55,15 @@ jobs:
 
       - name: Run pyinstrument profiler
         run: make profile-all
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+      - name: Upload pyinstrument reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyinstrument-reports
+          path: pyinstrument_*.html
