@@ -40,7 +40,7 @@ jobs:
         run: |
           poetry run coverage run -m pytest src 
           poetry run coverage report 
-          peotry run coverage html
+          poetry run coverage html
 
       - name: Run pyinstrument profiler
         run: |
