@@ -28,7 +28,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install dependencies
-        run: poetry install --with ci
+        run: poetry install --with ci --no-interaction --no-root
 
       - name: Run Unit Tests
         run: poetry run pytest src
