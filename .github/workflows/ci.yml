@@ -80,7 +80,7 @@ jobs:
           mkdir -p pages/profiler
 
           cp -r htmlcov/* pages/coverage/ || true
-          cp profiler/pyinstrument_*.html pages/profiler/ || true
+          cp -r profiler/* pages/profiler/ || true
           cp reports_index.html pages/index.html || true
 
       - name: Upload artifact
