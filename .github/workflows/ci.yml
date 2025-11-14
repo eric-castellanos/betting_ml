@@ -73,20 +73,19 @@ jobs:
           name: pyinstrument-reports
           path: pyinstrument_*.html
 
-      - name: Deploy Coverage Report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: htmlcov
-          destination_dir: coverage
+      - name: Prepare Pages directory
+        run: |
+          mkdir pages
+          mkdir pages/coverage
+          mkdir pages/profiler
+          cp -r htmlcov/* pages/coverage/
+          cp -r pyinstrument_*.html pages/profiler/ || true
 
-      - name: Deploy Profiling Reports to GitHub Pages
+      - name: Deploy Reports to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: .
-          destination_dir: profiler
-          keep_files: true
+          publish_dir: pages
+
 
