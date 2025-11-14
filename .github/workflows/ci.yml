@@ -28,19 +28,19 @@ jobs:
         run: poetry install --with ci
 
       - name: Run Unit Tests
-        run: pytest src
+        run: poetry run pytest src
 
       - name: Run mypy
-        run: mypy src
+        run: poetry run mypy src
 
       - name: Run pylint
-        run: pylint src
+        run: poetry run pylint src
 
       - name: Run coverage
-        run: coverage run -m pytest src && coverage report && coverage html
+        run: poetry run coverage run -m pytest src && coverage report && coverage html
 
       - name: Run pyinstrument profiler
         run: |
           for file in $(find src -name "*.py"); do
-            pyinstrument $file --html -o pyinstrument_${file//\//_}.html || true
+            poetry run pyinstrument $file --html -o pyinstrument_${file//\//_}.html || true
           done
