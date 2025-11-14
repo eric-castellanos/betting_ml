@@ -11,7 +11,7 @@ import click
 from src.utils.utils import save_data
 
 logging.basicConfig(
-    level=logging.DEBUG, 
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s"
 )
 
@@ -111,18 +111,19 @@ def fetch_play_by_play_data_logic(
 )
 def fetch_play_by_play_data(years, urls, local_path, bucket, key, local):
     """
-    Fetch NFL play-by-play data for specified years from given URLs, save each year's data locally and/or upload to S3.
+    Fetch NFL play-by-play data for specified years from given URLs, 
+    save each year's data locally and/or upload to S3.
 
     Args:
         years (List[str]): List of years to fetch data for (e.g., ["2020", "2021"]).
-        urls (List[str]): List of URLs to download Parquet files from. If empty, defaults are built from years.
+        urls (List[str]): List of URLs to download Parquet files from.
         local_path (str): Local directory to save Parquet files.
         bucket (str): S3 bucket name to upload files to.
         key (str): S3 prefix (folder) to upload files under.
         local (bool): If True, saves files locally in addition to S3 upload.
 
     Returns:
-        Dict[str, pl.DataFrame]: Dictionary mapping year keys (e.g., "play_by_play_2020") to Polars DataFrames.
+        Dict[str, pl.DataFrame]: Dictionary mapping year keys to Polars DataFrames.
 
     Raises:
         ValueError: If input validation fails (e.g., mismatched years/urls, invalid year or URL).
@@ -153,7 +154,7 @@ def fetch_play_by_play_data(years, urls, local_path, bucket, key, local):
     logger.info("Data fetching completed successfully.")
     return result
 
-# comment out this function for now, 
+# comment out this function for now,
 # we don't need real time bet data atm
 # def fetch_bets_data(url : str) -> Dict[str, Any]:
 #     """
