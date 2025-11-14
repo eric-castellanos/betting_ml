@@ -8,7 +8,7 @@ from typing import Dict, List
 import polars as pl
 import click
 
-from utils import save_data
+from src.utils.utils import save_data
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s")
 

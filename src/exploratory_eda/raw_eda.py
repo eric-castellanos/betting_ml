@@ -11,7 +11,7 @@ import pandas as pd
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from utils import save_data_s3, load_data_s3
+from src.utils.utils import save_data_s3, load_data_s3
 
 # Configure logging
 logging.basicConfig(
