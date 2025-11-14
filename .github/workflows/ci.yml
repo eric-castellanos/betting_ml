@@ -80,7 +80,7 @@ jobs:
           mkdir -p pages/profiler
 
           cp -r htmlcov/* pages/coverage/ || true
-          cp pyinstrument_*.html pages/profiler/ || true
+          cp profiler/pyinstrument_*.html pages/profiler/ || true
           cp reports_index.html pages/index.html || true
 
       - name: Upload artifact
@@ -95,10 +95,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Debug Pages contents
-        run: |
-          echo "Pages directory:"
-          ls -R pages
 
       - name: Deploy to GitHub Pages
         id: deploy
