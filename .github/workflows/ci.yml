@@ -89,7 +89,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: build
+    needs: ci
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
