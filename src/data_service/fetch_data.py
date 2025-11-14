@@ -1,4 +1,4 @@
-# fetch_data.py
+"""Script to fetch raw pbp and bet data"""
 
 import logging
 from typing import Dict, List
@@ -10,7 +10,10 @@ import click
 
 from src.utils.utils import save_data
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +121,8 @@ def fetch_play_by_play_data(years: List[str], urls: List[str], local_path: str, 
 
     return data_dict
 
-# comment out this function for now, we don't need real time bet data atm
+# comment out this function for now, 
+# we don't need real time bet data atm
 # def fetch_bets_data(url : str) -> Dict[str, Any]:
 #     """
 #     Args:
