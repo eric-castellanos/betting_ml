@@ -58,7 +58,7 @@ def save_data(data: pl.DataFrame, bucket : str, key : str, filename: Optional[st
         logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
         s3_client.upload_fileobj(buffer, bucket, s3_key)
 
-def load_data(bucket: str, key: str) -> Optional[pl.DataFrame]:
+def load_data(bucket: str, key: str) -> pl.DataFrame:
     """
     Load a Parquet file from S3 and return as a Polars DataFrame.
     Args:
