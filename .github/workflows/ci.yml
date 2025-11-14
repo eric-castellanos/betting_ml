@@ -4,6 +4,7 @@ on:
       - "main"
       - "feature/*"
       - "feature_engineering"
+      - "create_actions_workflow"
 
 jobs:
   ci:
