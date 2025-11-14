@@ -68,16 +68,6 @@ def fetch_play_by_play_data(years: List[str], urls: List[str], local_path: str, 
         ValueError: If input validation fails (e.g., mismatched years/urls, invalid year or URL).
         OSError: If there is a network or file error when reading Parquet files.
         Exception: For any other unexpected errors during data fetching or saving.
-
-    Example:
-        fetch_play_by_play_data(
-            years=["2020", "2021"],
-            urls=[],
-            local_path="../../data/raw",
-            bucket="sports-betting-ml",
-            key="raw-data",
-            local=True
-        )
     """
     # ✅ Build default URLs if none provided
     if not urls:
