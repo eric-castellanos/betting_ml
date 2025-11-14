@@ -6,6 +6,11 @@ on:
       - "feature_engineering"
       - "create_actions_workflow"
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   ci:
     runs-on: ubuntu-latest
