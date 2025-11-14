@@ -37,11 +37,13 @@ jobs:
         run: poetry run pylint --rcfile=.pylintrc src
 
       - name: Run coverage
-        run: poetry run coverage run -m pytest src && coverage report && coverage html
+        run: |
+          poetry run coverage run -m pytest src 
+          poetry run coverage report 
+          peotry run coverage html
 
       - name: Run pyinstrument profiler
         run: |
           for file in $(find src -name "*.py"); do
             poetry run pyinstrument $file --html -o pyinstrument_${file//\//_}.html || true
           done
-          
