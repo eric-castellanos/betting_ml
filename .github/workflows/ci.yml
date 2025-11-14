@@ -73,7 +73,7 @@ jobs:
           name: pyinstrument-reports
           path: pyinstrument_*.html
 
-      - name: Debug: list workspace
+      - name: Debug - list workspace
         run: |
           echo "=== ROOT ==="
           ls -R .
