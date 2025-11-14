@@ -54,7 +54,4 @@ jobs:
           poetry run coverage html
 
       - name: Run pyinstrument profiler
-        run: |
-          for file in $(find src -name "*.py"); do
-            poetry run pyinstrument $file --html -o pyinstrument_${file//\//_}.html || true
-          done
+        run: make profile-all
