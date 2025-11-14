@@ -27,8 +27,11 @@ jobs:
           cache: "poetry"
           cache-dependency-path: poetry.lock
 
-      - name: Activate Python 3.10 for Poetry
-        run: poetry env use python3.10
+      - name: Configure Poetry interpreter
+        run: |
+          poetry config virtualenvs.use-poetry-python true
+          rm -rf .venv || true
+          poetry env use python3.10
 
       - name: Install dependencies
         run: poetry install --with ci --no-interaction --no-root
