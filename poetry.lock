@@ -1560,7 +1560,7 @@ version = "1.25.2"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.9"
-groups = ["raw-eda"]
+groups = ["ci", "raw-eda"]
 files = [
     {file = "numpy-1.25.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:db3ccc4e37a6873045580d413fe79b68e47a681af8db2e046f1dacfa11f86eb3"},
     {file = "numpy-1.25.2-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:90319e4f002795ccfc9050110bbbaa16c944b1c37c0baeea43c5fb881693ae1f"},
@@ -1699,6 +1699,40 @@ spss = ["pyreadstat (>=1.2.0)"]
 sql-other = ["SQLAlchemy (>=2.0.0)", "adbc-driver-postgresql (>=0.8.0)", "adbc-driver-sqlite (>=0.8.0)"]
 test = ["hypothesis (>=6.46.1)", "pytest (>=7.3.2)", "pytest-xdist (>=2.2.0)"]
 xml = ["lxml (>=4.9.2)"]
+
+[[package]]
+name = "pandas-stubs"
+version = "2.2.2.240807"
+description = "Type annotations for pandas"
+optional = false
+python-versions = ">=3.9"
+groups = ["ci"]
+markers = "python_version == \"3.9\""
+files = [
+    {file = "pandas_stubs-2.2.2.240807-py3-none-any.whl", hash = "sha256:893919ad82be4275f0d07bb47a95d08bae580d3fdea308a7acfcb3f02e76186e"},
+    {file = "pandas_stubs-2.2.2.240807.tar.gz", hash = "sha256:64a559725a57a449f46225fbafc422520b7410bff9252b661a225b5559192a93"},
+]
+
+[package.dependencies]
+numpy = ">=1.23.5"
+types-pytz = ">=2022.1.1"
+
+[[package]]
+name = "pandas-stubs"
+version = "2.3.2.250926"
+description = "Type annotations for pandas"
+optional = false
+python-versions = ">=3.10"
+groups = ["ci"]
+markers = "python_version >= \"3.10\""
+files = [
+    {file = "pandas_stubs-2.3.2.250926-py3-none-any.whl", hash = "sha256:81121818453dcfe00f45c852f4dceee043640b813830f6e7bd084a4ef7ff7270"},
+    {file = "pandas_stubs-2.3.2.250926.tar.gz", hash = "sha256:c64b9932760ceefb96a3222b953e6a251321a9832a28548be6506df473a66406"},
+]
+
+[package.dependencies]
+numpy = ">=1.23.5"
+types-pytz = ">=2022.1.1"
 
 [[package]]
 name = "pathspec"
@@ -3047,6 +3081,18 @@ importlib_metadata = {version = ">=3.6", markers = "python_version < \"3.10\""}
 typing_extensions = ">=4.14.0"
 
 [[package]]
+name = "types-pytz"
+version = "2025.2.0.20251108"
+description = "Typing stubs for pytz"
+optional = false
+python-versions = ">=3.9"
+groups = ["ci"]
+files = [
+    {file = "types_pytz-2025.2.0.20251108-py3-none-any.whl", hash = "sha256:0f1c9792cab4eb0e46c52f8845c8f77cf1e313cb3d68bf826aa867fe4717d91c"},
+    {file = "types_pytz-2025.2.0.20251108.tar.gz", hash = "sha256:fca87917836ae843f07129567b74c1929f1870610681b4c92cb86a3df5817bdb"},
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 description = "Backported and Experimental Type Hints for Python 3.9+"
@@ -3301,4 +3347,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.12"
-content-hash = "7443e6502a8d7f61dff2388888b92ce1ae7131e83b3f00b8f0957ae13d1bfbbb"
+content-hash = "dc7d5becd88d3528d90298dda7c7f2ca3a51b7877330393e3704eda462996ba7"
