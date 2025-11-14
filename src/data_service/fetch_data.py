@@ -138,7 +138,7 @@ def fetch_play_by_play_data(years, urls, local_path, bucket, key, local):
         # Build default URLs ONLY for CLI
     if not urls:
         urls = [
-            f"https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{year}.parquet"
+            f"https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_{year}.parquet" # pylint: disable=C0301
             for year in years
         ]
 
