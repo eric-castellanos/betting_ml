@@ -11,7 +11,7 @@ import pandas as pd
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.utils.utils import save_data_s3, load_data_s3
+from src.utils.utils import save_data, load_data
 
 # Configure logging
 logging.basicConfig(
@@ -42,9 +42,8 @@ def generate_raw_eda_report(raw_bucket: str, raw_key: str, report_bucket: str, r
 
     try:
         logging.info(f"Loading raw data from S3: s3://{raw_bucket}/{raw_key}")
-        df = load_data_s3(raw_bucket, raw_key)
-        if isinstance(df, pl.DataFrame):
-            df = df.to_pandas()
+        # loaded object should always be a polars dataframe
+        df = load_data(raw_bucket, raw_key).to_pandas()
 
         logging.info(f"Generating raw data EDA report at {local_file}")
         report = ProfileReport(
@@ -59,7 +58,7 @@ def generate_raw_eda_report(raw_bucket: str, raw_key: str, report_bucket: str, r
         # Save report to S3
         with open(local_file, "rb") as f:
             report_data = f.read()
-        save_data_s3(
+        save_data(
             data=pl.DataFrame(),  # Dummy DataFrame, not used for HTML
             bucket=report_bucket,
             key=report_key,
