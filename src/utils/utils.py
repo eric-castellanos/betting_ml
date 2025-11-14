@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 logger = logging.getLogger(__name__)
 
-def save_data_s3(data: pl.DataFrame, bucket : str, key : str, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
+def save_data(data: pl.DataFrame, bucket : str, key : str, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
     """
     Save data to S3 bucket. If local set to True, save data to a local parquet file.
     Args:
@@ -58,7 +58,7 @@ def save_data_s3(data: pl.DataFrame, bucket : str, key : str, filename: Optional
         logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
         s3_client.upload_fileobj(buffer, bucket, s3_key)
 
-def load_data_s3(bucket: str, key: str) -> Optional[pl.DataFrame]:
+def load_data(bucket: str, key: str) -> Optional[pl.DataFrame]:
     """
     Load a Parquet file from S3 and return as a Polars DataFrame.
     Args:
