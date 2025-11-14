@@ -81,6 +81,7 @@ jobs:
 
           cp -r htmlcov/* pages/coverage/ || true
           cp pyinstrument_*.html pages/profiler/ || true
+          cp reports_index.html pages/index.html || true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
