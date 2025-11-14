@@ -72,11 +72,6 @@ jobs:
         with:
           name: pyinstrument-reports
           path: pyinstrument_*.html
-
-      - name: Debug - list workspace
-        run: |
-          echo "=== ROOT ==="
-          ls -R .
         
       - name: Prepare Pages directory
         run: |
@@ -87,9 +82,16 @@ jobs:
           cp -r htmlcov/* pages/coverage/ || true
 
           echo "Copying profiler HTML..."
-          find . -maxdepth 1 -name "pyinstrument_*.html" -exec cp {} pages/profiler/ \;
+          cp pyinstrument_*.html pages/profiler || true
 
-          cp reports_index.html pages/index.html || true
+          cp .pages/reports_index.html pages/index.html || true
+
+          # profiler index
+          echo "<h1>Profiler Reports</h1>" > pages/profiler/index.html
+          for f in pages/profiler/*.html; do
+            filename=$(basename "$f")
+            echo "<p><a href=\"$filename\">$filename</a></p>" >> pages/profiler/index.html
+          done
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
