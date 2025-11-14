@@ -42,9 +42,9 @@ def generate_raw_eda_report(raw_bucket: str, raw_key: str, report_bucket: str, r
 
     try:
         logging.info(f"Loading raw data from S3: s3://{raw_bucket}/{raw_key}")
-        df = load_data(raw_bucket, raw_key)
+        df_pl: pl.DataFrame = load_data(raw_bucket, raw_key)
         if isinstance(df, pl.DataFrame):
-            df = df.to_pandas()
+            df: pd.DataFrame = df_pl.to_pandas()
 
         logging.info(f"Generating raw data EDA report at {local_file}")
         report = ProfileReport(
