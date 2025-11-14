@@ -73,18 +73,27 @@ jobs:
           name: pyinstrument-reports
           path: pyinstrument_*.html
 
+        
       - name: Prepare Pages directory
         run: |
-          mkdir pages
-          mkdir pages/coverage
-          mkdir pages/profiler
-          cp -r htmlcov/* pages/coverage/
-          cp -r pyinstrument_*.html pages/profiler/ || true
+          mkdir -p pages/coverage
+          mkdir -p pages/profiler
+          
+          # Copy coverage HTML output
+          if [ -d "htmlcov" ]; then
+            cp -r htmlcov/* pages/coverage/
+          fi
+
+          # Copy pyinstrument output files
+          if ls pyinstrument_*.html 1> /dev/null 2>&1; then
+            cp pyinstrument_*.html pages/profiler/
+          fi
 
       - name: Deploy Reports to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
           publish_dir: pages
+          publish_branch: gh-pages
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
 
