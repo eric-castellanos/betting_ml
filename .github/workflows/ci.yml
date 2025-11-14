@@ -83,8 +83,12 @@ jobs:
           mkdir -p pages/coverage
           mkdir -p pages/profiler
 
+          echo "Copying coverage HTML..."
           cp -r htmlcov/* pages/coverage/ || true
-          cp -r profiler/* pages/profiler/ || true
+
+          echo "Copying profiler HTML..."
+          find . -maxdepth 1 -name "pyinstrument_*.html" -exec cp {} pages/profiler/ \;
+
           cp reports_index.html pages/index.html || true
 
       - name: Upload artifact
