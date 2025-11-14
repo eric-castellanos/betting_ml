@@ -95,6 +95,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Debug Pages contents
+        run: |
+          echo "Pages directory:"
+          ls -R pages
+
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
