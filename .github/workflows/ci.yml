@@ -1,0 +1,113 @@
+on:
+  pull_request:
+    branches:
+      - "main"
+      - "feature/*"
+      - "feature_engineering"
+      - "create_actions_workflow"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 2.1.3
+          virtualenvs-create: true
+          virtualenvs-in-project: true 
+
+      - name: Cache the virtualenv
+        uses: actions/cache@v4
+        id: poetry-cache
+        with:
+          path: .venv                      
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        if: steps.poetry-cache.outputs.cache-hit != 'true'
+        run: poetry install --with ci --no-interaction --no-root
+
+      - name: Run Unit Tests
+        run: poetry run pytest src
+
+      - name: Run mypy
+        run: poetry run mypy src
+
+      - name: Run pylint
+        run: poetry run pylint --rcfile=.pylintrc src
+
+      - name: Run coverage
+        run: |
+          poetry run coverage run -m pytest src 
+          poetry run coverage report 
+          poetry run coverage html
+
+      - name: Run pyinstrument profiler
+        run: make profile-all
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+      - name: Upload pyinstrument reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyinstrument-reports
+          path: pyinstrument_*.html
+        
+      - name: Prepare Pages directory
+        run: |
+          mkdir -p pages/coverage
+          mkdir -p pages/profiler
+
+          echo "Copying coverage HTML..."
+          cp -r htmlcov/* pages/coverage/ || true
+
+          echo "Copying profiler HTML..."
+          cp pyinstrument_*.html pages/profiler || true
+
+          cp .pages/reports_index.html pages/index.html || true
+
+          # profiler index
+          echo "<h1>Profiler Reports</h1>" > pages/profiler/index.html
+          for f in pages/profiler/*.html; do
+            filename=$(basename "$f")
+            echo "<p><a href=\"$filename\">$filename</a></p>" >> pages/profiler/index.html
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: ci
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+
