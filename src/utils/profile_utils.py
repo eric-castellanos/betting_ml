@@ -19,16 +19,26 @@ def get_functions(module):
 
 def profile_function(module_name, func_name, func):
     profiler = pyinstrument.Profiler()
-    profiler.start()
     try:
-        # Attempt calling function with no arguments
-        func()
-    except Exception:
-        pass
-    profiler.stop()
+        sig = inspect.signature(func)
+        if any(
+            p.default is inspect._empty and
+            p.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD
+            for p in sig.parameters.values()
+        ):
+            print(f"Skipping {module_name}.{func_name} — requires args")
+            return
 
-    safe = f"{module_name}_{func_name}".replace(".", "_")
-    profiler.write_html(f"pyinstrument_{safe}.html")
+        profiler.start()
+        func()  # now safe
+        profiler.stop()
+
+        safe = f"{module_name}_{func_name}".replace(".", "_")
+        profiler.write_html(f"pyinstrument_{safe}.html")
+
+    except Exception as e:
+        print(f"Function {module_name}.{func_name} failed: {e}")
+
 
 def main():
     for module_name in iter_modules():
