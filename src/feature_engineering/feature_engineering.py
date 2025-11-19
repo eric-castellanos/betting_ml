@@ -220,9 +220,9 @@ def run_feature_engineering(
     if local:
         if not output_path:
             raise ValueError("You must provide --output-path when using --local")
-        filename = f"{output_path}/features_{year}.parquet"
+        filename = f"features_{year}.parquet"
         logger.info(f"Saving processed dataset locally: {filename}")
-        save_data(data=processed, filename=filename, local=True)
+        save_data(data=processed, filename=filename, local=True, local_path=output_path)
     else:
         key = output_key_template.format(year=year)
         logger.info(f"Saving processed dataset to S3: s3://{bucket}/{key}")
