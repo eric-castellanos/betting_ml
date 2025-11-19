@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from src.feature_engineering.feature_engineering import (
     compute_team_game_features,
-    validate_df,
+    run,
 )
 
 @pytest.fixture
@@ -166,17 +166,29 @@ def test_compute_team_game_features_basic(pbp_df):
     buf = result.filter(pl.col("posteam") == "BUF")
     assert float(buf["total_epa"][0]) == pytest.approx(1.0 + -0.5)
 
+@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate")
+@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate")
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.save_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
-def test_validate_df_cli(mock_compute, mock_save, mock_load):
+def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mock_team_schema):
+    """Test the Click CLI (run) success path."""
+
     mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
     mock_compute.return_value = pl.DataFrame({"game_id": ["G1"], "posteam": ["BUF"]})
 
+    from src.feature_engineering.feature_engineering import run
+
     runner = CliRunner()
     result = runner.invoke(
-        validate_df,
-        ["--local", "True", "--filename", "test.parquet"]
+        run,
+        [
+            "--local",
+            "--input-path", ".",
+            "--output-path", ".",
+            "--filename", "test.parquet",
+            "--year", "2020",
+        ],
     )
 
     assert result.exit_code == 0
@@ -184,24 +196,32 @@ def test_validate_df_cli(mock_compute, mock_save, mock_load):
     mock_compute.assert_called_once()
     mock_save.assert_called_once()
 
+@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate")
+@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate")
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
-def test_validate_df_schema_error(mock_compute, mock_load):
+def test_run_cli_schema_error(mock_compute, mock_load, mock_raw_schema, mock_team_schema):
+    """Test the CLI handles Pandera schema errors without crashing."""
+
     mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
+
     mock_compute.side_effect = pa.errors.SchemaError(
-        schema = None,
+        schema=None,
         data=pl.DataFrame({"game_id": [], "posteam": []}),
         message="Schema error!"
     )
 
+    from src.feature_engineering.feature_engineering import run
 
     runner = CliRunner()
     result = runner.invoke(
-        validate_df,
-        ["--local", "True", "--filename", "test.parquet"]
+        run,
+        [
+            "--local",
+            "--input-path", ".",
+            "--output-path", ".",
+            "--filename", "test.parquet",
+        ],
     )
 
-    assert result.exit_code == 0
-
-
-
+    assert result.exit_code == 1
