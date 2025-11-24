@@ -202,7 +202,7 @@ def run_feature_engineering(
     else:
         key = input_key_template.format(year=year)
         logger.info(f"Loading S3 data: s3://{bucket}/{key}")
-        raw = load_data(bucket=bucket, key=key, local=False)
+        raw = load_data(filename=filename, bucket=bucket, key=key, local=False)
 
     # --- Schema validate ---
     RawPlayByPlaySchema.validate(raw.lazy()).collect()
@@ -226,7 +226,7 @@ def run_feature_engineering(
     else:
         key = output_key_template.format(year=year)
         logger.info(f"Saving processed dataset to S3: s3://{bucket}/{key}")
-        save_data(processed, bucket=bucket, key=key, local=False)
+        save_data(processed, filename=filename, bucket=bucket, key=key, local=False)
 
 # -----------------------------
 #             CLICK CLI
@@ -241,7 +241,7 @@ def run_feature_engineering(
 @click.option("--filename", type=str, default="2020_pbp_data.parquet", help="local filename")
 @click.option(
     "--input-key-template",
-    default="raw-data/{year}_pbp_data.parquet",
+    default="raw-data",
     show_default=True,
     help="S3 key template for raw data",
 )
