@@ -1,3 +1,5 @@
+""" Tests for feature engineering functions. """
+
 import pytest
 import polars as pl
 import pandera as pa
@@ -11,6 +13,7 @@ from src.feature_engineering.feature_engineering import (
 
 @pytest.fixture
 def pbp_df():
+    """ Fixture for pbp data """
     return pl.DataFrame({
         "game_id": ["G1", "G1", "G1", "G1"],
         "posteam": ["BUF", "BUF", "KC", "KC"],
@@ -51,6 +54,7 @@ def pbp_df():
     })
 
 def test_epa_and_success_logic(pbp_df):
+    """ test epa and success rate calculations """
     result = compute_team_game_features(pbp_df)
     buf = result.filter(pl.col("posteam") == "BUF")
 
@@ -62,6 +66,7 @@ def test_epa_and_success_logic(pbp_df):
     assert float(buf["success_rate"][0]) == pytest.approx(0.5)
 
 def test_explosive_play_rate(pbp_df):
+    """ test explosive play rate calculations """
     result = compute_team_game_features(pbp_df)
 
     # BUF: yards_gained = [20, 3] → 1 explosive out of 2 plays = 0.5
@@ -73,6 +78,7 @@ def test_explosive_play_rate(pbp_df):
     assert float(kc["pct_plays_over_15yds"][0]) == pytest.approx(0.5)
 
 def test_turnover_count(pbp_df):
+    """ test turnover count calculations """
     result = compute_team_game_features(pbp_df)
 
     # BUF: 0 INT + 1 fumble = 1
@@ -84,6 +90,7 @@ def test_turnover_count(pbp_df):
     assert float(kc["turnover_count"][0]) == 1.0
 
 def test_down_success_rate(pbp_df):
+    """ test down success rate calculations """
     result = compute_team_game_features(pbp_df)
 
     # For BUF:
@@ -101,6 +108,7 @@ def test_down_success_rate(pbp_df):
     assert float(kc["third_down_success_rate"][0]) == pytest.approx(0.5)
 
 def test_passing_metrics(pbp_df):
+    """ test passing metrics calculations """
     result = compute_team_game_features(pbp_df)
     buf = result.filter(pl.col("posteam") == "BUF")
 
@@ -115,6 +123,7 @@ def test_passing_metrics(pbp_df):
     assert float(buf["comp_pct"][0]) == pytest.approx(1.0)
 
 def test_rushing_metrics(pbp_df):
+    """ test rushing metrics calculations """
     result = compute_team_game_features(pbp_df)
     buf = result.filter(pl.col("posteam") == "BUF")
 
@@ -126,6 +135,7 @@ def test_rushing_metrics(pbp_df):
     assert float(buf["rush_yards_avg"][0]) == pytest.approx(7.0)
 
 def test_redzone_td_rate(pbp_df):
+    """ test red zone touchdown rate calculations """
     result = compute_team_game_features(pbp_df)
     buf = result.filter(pl.col("posteam") == "BUF")
 
@@ -134,6 +144,7 @@ def test_redzone_td_rate(pbp_df):
     assert float(buf["td_rate_in_redzone"][0]) == pytest.approx(1.0)
 
 def test_final_score_logic(pbp_df):
+    """ test final score calculations """
     result = compute_team_game_features(pbp_df)
     buf = result.filter(pl.col("posteam") == "BUF")
 
@@ -144,6 +155,7 @@ def test_final_score_logic(pbp_df):
     assert buf["final_away_score"][0] == 21
 
 def test_compute_team_game_features_basic(pbp_df):
+    """ test basic functionality of compute_team_game_features """
     result = compute_team_game_features(pbp_df)
 
     assert result.shape[0] == 2
