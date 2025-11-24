@@ -4,3 +4,5 @@ disable =
     R0917,  # too-many-positional-arguments
     W1203,  # logging-fstring-interpolation
     E1120,  # no-value-for-parameter
+    C0301,  # line too long
+    W0621,  # remove error for pytest fixtures
