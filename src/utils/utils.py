@@ -124,14 +124,14 @@ def load_data(
         raise
 
 def polars_info(df: pl.DataFrame) -> pl.DataFrame:
-    info = df.select([
-        pl.lit(df.height).alias("n_rows"),
-        pl.lit(df.width).alias("n_cols"),
-    ])
-    null_counts = df.null_count().transpose(include_header=True)
-    schema = pl.DataFrame({
+    """
+    Returns a summary DataFrame with column names, dtypes, and null counts.
+    """
+    return pl.DataFrame({
         "column": list(df.schema.keys()),
         "dtype": [str(v) for v in df.schema.values()],
         "nulls": [df[col].null_count() for col in df.columns],
+        "n_rows": [df.height] * len(df.columns),
+        "n_cols": [df.width] * len(df.columns),
     })
-    return schema
+
