@@ -123,7 +123,7 @@ def load_data(
         logger.error(f"Failed to read parquet from s3://{bucket}/{s3_key}: {e}")
         raise
 
-def polars_info(df: pl.DataFrame):
+def polars_info(df: pl.DataFrame) -> pl.DataFrame:
     info = df.select([
         pl.lit(df.height).alias("n_rows"),
         pl.lit(df.width).alias("n_cols"),
