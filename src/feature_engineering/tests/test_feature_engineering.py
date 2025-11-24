@@ -1,10 +1,11 @@
 """ Tests for feature engineering functions. """
 
+from unittest.mock import patch
+
 import pytest
 import polars as pl
 import pandera as pa
 from click.testing import CliRunner
-from unittest.mock import patch
 
 from src.feature_engineering.feature_engineering import (
     compute_team_game_features,
@@ -178,8 +179,8 @@ def test_compute_team_game_features_basic(pbp_df):
     buf = result.filter(pl.col("posteam") == "BUF")
     assert float(buf["total_epa"][0]) == pytest.approx(1.0 + -0.5)
 
-@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate")
-@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate")
+@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate") # pylint: disable=W0613
+@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate") # pylint: disable=W0613
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.save_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
@@ -206,8 +207,8 @@ def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mo
     mock_compute.assert_called_once()
     mock_save.assert_called_once()
 
-@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate")
-@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate")
+@patch("src.feature_engineering.feature_engineering.TeamGameFeaturesSchema.validate") # pylint: disable=W0613
+@patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate") # pylint: disable=W0613
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
 def test_run_cli_schema_error(mock_compute, mock_load, mock_raw_schema, mock_team_schema):
@@ -220,8 +221,6 @@ def test_run_cli_schema_error(mock_compute, mock_load, mock_raw_schema, mock_tea
         data=pl.DataFrame({"game_id": [], "posteam": []}),
         message="Schema error!"
     )
-
-    from src.feature_engineering.feature_engineering import run
 
     runner = CliRunner()
     result = runner.invoke(
