@@ -189,8 +189,6 @@ def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mo
     mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
     mock_compute.return_value = pl.DataFrame({"game_id": ["G1"], "posteam": ["BUF"]})
 
-    from src.feature_engineering.feature_engineering import run
-
     runner = CliRunner()
     result = runner.invoke(
         run,
