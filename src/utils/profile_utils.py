@@ -101,6 +101,47 @@ def profile_function(module_name, func_name, func):
         profiler.stop()
         print(f"Function {module_name}.{func_name} failed during profiling: {e}")
 
+def is_safe_to_profile(module_name, func_name, func):
+    # Skip test modules
+    if ".tests" in module_name:
+        return False
+
+    # Skip pytest fixtures
+    if "pytest" in inspect.getsource(func):
+        return False
+
+    # Skip explicit pytest fixtures
+    if hasattr(func, "_pytestfixturefunction"):
+        return False
+
+    # Skip test functions
+    if func_name.startswith("test_"):
+        return False
+
+    # Skip private/dunder functions
+    if func_name.startswith("_"):
+        return False
+
+    # Skip patched/mocking helpers
+    if func_name == "patch":
+        return False
+
+    # Skip functions requiring args
+    try:
+        sig = inspect.signature(func)
+        for p in sig.parameters.values():
+            if (
+                p.kind == p.POSITIONAL_ONLY
+                or p.kind == p.POSITIONAL_OR_KEYWORD
+            ) and p.default is inspect._empty:
+                return False
+            if p.kind in (p.VAR_POSITIONAL, p.VAR_KEYWORD):
+                return False
+    except Exception:
+        return False
+
+    return True
+
 
 # ---------------------------------------------------------
 # Main
@@ -115,6 +156,9 @@ def main():
             continue
 
         for func_name, func in get_functions(module):
+            if not is_safe_to_profile(module_name, func_name, func):
+                continue
+                
             print(f"Profiling {module_name}.{func_name}")
             profile_function(module_name, func_name, func)
 
