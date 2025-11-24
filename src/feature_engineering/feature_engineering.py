@@ -1,3 +1,5 @@
+""" Script for computing features for sports betting ML models """
+
 import logging
 import click
 import polars as pl
@@ -9,7 +11,11 @@ from src.utils.utils import (
     polars_info,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(lineno)d")
+logging.basicConfig(
+    level=logging.INFO, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(lineno)d"
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,6 +23,9 @@ logger = logging.getLogger(__name__)
 #  Pandera Schema Definitions
 # -----------------------------
 class RawPlayByPlaySchema(pa.DataFrameModel):
+    """
+    Schema for raw play-by-play data used in feature engineering.
+    """
     # --- Identifiers ---
     game_id: str
     posteam: str
@@ -68,6 +77,7 @@ class RawPlayByPlaySchema(pa.DataFrameModel):
 
 
 class TeamGameFeaturesSchema(pa.DataFrameModel):
+    """ Schema for team-game level features computed from play-by-play data. """
     game_id: str
     posteam: str
 
@@ -113,6 +123,20 @@ class TeamGameFeaturesSchema(pa.DataFrameModel):
 #  Feature Engineering Logic
 # -----------------------------
 def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Aggregates play-by-play data to compute team-level game features for sports analytics.
+
+    This function groups the input DataFrame by "game_id" and "posteam" and computes a variety of
+    statistical features, including means, sums, first values, maximums, and conditional aggregations
+    for passing, rushing, red zone, and situational metrics. Custom features such as percentage of
+    plays over 15 yards, turnover count, and third down success rate are also calculated.
+
+    Parameters:
+        df (pl.DataFrame): The raw play-by-play data as a Polars DataFrame.
+
+    Returns:
+        pl.DataFrame: A DataFrame with one row per team per game, containing aggregated features.
+    """
     mean_cols = {
         "epa": "avg_epa",
         "success": "success_rate",
@@ -191,6 +215,30 @@ def run_feature_engineering(
     input_key_template: str,
     output_key_template: str,
 ):
+    """
+    Runs the end-to-end feature engineering pipeline for sports betting ML models.
+
+    This function loads raw play-by-play data (from a local path or S3, depending on the `local` flag),
+    validates it against the expected schema, computes team-level game features, validates the output,
+    and saves the processed features either locally or to S3.
+
+    Parameters:
+        local (bool): If True, load and save data locally; otherwise, use S3.
+        year (int): The season year to process.
+        input_path (str | None): Local input file path (required if local=True).
+        output_path (str | None): Local output directory (required if local=True).
+        filename (str | None): Filename for input/output data.
+        bucket (str | None): S3 bucket name (required if local=False).
+        input_key_template (str): S3 key template for raw data.
+        output_key_template (str): S3 key template for processed output.
+
+    Raises:
+        ValueError: If required paths are not provided for the selected mode.
+
+    Returns:
+        None
+    """
+
     logger.info(f"Starting feature engineering for year={year}, local={local}")
 
     # --- Load data ---
