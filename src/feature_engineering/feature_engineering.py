@@ -9,7 +9,7 @@ from src.utils.utils import (
     polars_info,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level)s - %(message)s - %(lineno)d")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s - %(lineno)d")
 logger = logging.getLogger(__name__)
 
 
