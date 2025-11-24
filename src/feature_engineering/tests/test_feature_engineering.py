@@ -184,7 +184,7 @@ def test_compute_team_game_features_basic(pbp_df):
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.save_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
-def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mock_team_schema):
+def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mock_team_schema): # pylint: disable=W0613
     """Test the Click CLI (run) success path."""
 
     mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
@@ -211,7 +211,7 @@ def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mo
 @patch("src.feature_engineering.feature_engineering.RawPlayByPlaySchema.validate") # pylint: disable=W0613
 @patch("src.feature_engineering.feature_engineering.load_data")
 @patch("src.feature_engineering.feature_engineering.compute_team_game_features")
-def test_run_cli_schema_error(mock_compute, mock_load, mock_raw_schema, mock_team_schema):
+def test_run_cli_schema_error(mock_compute, mock_load, mock_raw_schema, mock_team_schema):  # pylint: disable=W0613
     """Test the CLI handles Pandera schema errors without crashing."""
 
     mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
