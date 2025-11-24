@@ -39,6 +39,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-poetry-
 
+      - name: Generate poetry.lock if needed
+        run: poetry lock --no-interaction
+
       - name: Install dependencies
         if: steps.poetry-cache.outputs.cache-hit != 'true'
         run: poetry install --with ci --no-interaction --no-root
