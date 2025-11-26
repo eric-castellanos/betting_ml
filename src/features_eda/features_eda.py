@@ -49,8 +49,11 @@ def generate_features_eda_report(load_file: str, features_bucket: str, features_
         report = ProfileReport(
             df,
             title="NFL Play by Play Features Data EDA Report",
-            minimal=True,
-            explorative=False
+            minimal=False,
+            explorative=False,
+            correlations={
+                "pearson": {"calculate": True}
+            }
         )
         report.to_file(local_file)
         logging.info("Features data EDA report generation complete")
