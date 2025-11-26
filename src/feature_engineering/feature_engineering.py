@@ -152,12 +152,16 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
         "posteam_type": "home_away_flag",
         "roof": "roof_type",
         "surface": "surface",
-        "temp": "temp",
-        "wind": "wind",
     }
     first_aggs = [pl.col(c).first().alias(a) for c, a in first_cols.items()]
 
-    max_cols = {"home_score": "final_home_score", "away_score": "final_away_score"}
+    max_cols = {
+        "home_score": "final_home_score", 
+        "away_score": "final_away_score", 
+        "temp": "temp",
+        "wind": "wind"
+    }
+
     max_aggs = [pl.col(c).max().alias(a) for c, a in max_cols.items()]
 
     filters = [
@@ -176,7 +180,7 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
     ]
 
     conditional_aggs = [
-        pl.when(condition).then(pl.col(col)).mean().alias(alias)
+        pl.when(condition).then(pl.col(col)).otherwise(None).mean().alias(alias)
         for condition, columns in filters
         for col, alias in columns
     ]
@@ -185,16 +189,17 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
         (pl.col("yards_gained") > 15).mean().alias("pct_plays_over_15yds"),
         (pl.col("interception") + pl.col("fumble_lost")).sum().alias("turnover_count"),
         (
-            (
-                pl.col("third_down_converted") + pl.col("fourth_down_converted")
-            ).sum()
-            / (
-                pl.col("third_down_converted")
-                + pl.col("third_down_failed")
-                + pl.col("fourth_down_converted")
-                + pl.col("fourth_down_failed")
-            ).sum()
-        ).alias("third_down_success_rate"),
+        pl.when(
+            (pl.col("third_down_converted") + pl.col("third_down_failed") +
+            pl.col("fourth_down_converted") + pl.col("fourth_down_failed")) > 0
+        ).then(
+            (pl.col("third_down_converted") + pl.col("fourth_down_converted")).sum()
+            /
+            (pl.col("third_down_converted") + pl.col("third_down_failed") +
+            pl.col("fourth_down_converted") + pl.col("fourth_down_failed")).sum()
+        ).otherwise(0.0)
+        .alias("third_down_success_rate")
+        ),
     ]
 
     aggs = mean_aggs + sum_aggs + first_aggs + max_aggs + conditional_aggs + custom_aggs
