@@ -99,14 +99,20 @@ def test_down_success_rate(pbp_df):
     # Attempts = 3rd_conv + 3rd_fail + 4th_conv + 4th_fail = 1+1+0+0 = 2
     # Rate = 1/2 = 0.5
     buf = result.filter(pl.col("posteam") == "BUF")
-    assert float(buf["third_down_success_rate"][0]) == pytest.approx(0.5)
+    buf_rate = buf["third_down_success_rate"][0]
+    if isinstance(buf_rate, pl.Series):
+        buf_rate = buf_rate[0]
+    assert float(buf_rate) == pytest.approx(0.5)
 
     # KC:
     # Converted: 1 (fourth_down_converted)
     # Attempts: 0+1+1+0 = 2
     # Rate = 1/2 = 0.5
     kc = result.filter(pl.col("posteam") == "KC")
-    assert float(kc["third_down_success_rate"][0]) == pytest.approx(0.5)
+    kc_rate = kc["third_down_success_rate"][0]
+    if isinstance(kc_rate, pl.Series):
+        kc_rate = kc_rate[0]
+    assert float(kc_rate) == pytest.approx(0.5)
 
 def test_passing_metrics(pbp_df):
     """ test passing metrics calculations """
