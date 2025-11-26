@@ -161,7 +161,7 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
         "temp": "temp",
         "wind": "wind"
     }
-    
+
     max_aggs = [pl.col(c).max().alias(a) for c, a in max_cols.items()]
 
     filters = [
