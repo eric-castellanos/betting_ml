@@ -252,6 +252,9 @@ def run_feature_engineering(
         logger.info(f"Loading S3 data: s3://{bucket}/{key}")
         raw = load_data(filename=filename, bucket=bucket, key=key, local=False)
 
+    # Drop rows missing grouping keys to avoid null groups downstream.
+    raw = raw.filter(pl.col("game_id").is_not_null() & pl.col("posteam").is_not_null())
+
     # --- Schema validate ---
     RawPlayByPlaySchema.validate(raw.lazy()).collect()
 
