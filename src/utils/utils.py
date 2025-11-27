@@ -1,7 +1,7 @@
 from typing import Optional
 import logging
-import io
 import os
+import tempfile
 
 import polars as pl
 import boto3
@@ -52,11 +52,16 @@ def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[
                 logger.error(f"Error checking S3 for {s3_key}: {e}")
                 raise
 
-        buffer = io.BytesIO()
-        data.write_parquet(buffer)
-        buffer.seek(0)
-        logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
-        s3_client.upload_fileobj(buffer, bucket, s3_key)
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+            data.write_parquet(tmp_path)
+            logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
+            s3_client.upload_file(tmp_path, bucket, s3_key)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
 def load_data(
     bucket: Optional[str] = None,
@@ -106,12 +111,13 @@ def load_data(
     s3_client = boto3.client("s3")
     s3_key = f"{key}/{filename}"
 
-    buffer = io.BytesIO()
+    tmp_path = None
     try:
         logger.info(f"Downloading file from s3://{bucket}/{s3_key}")
-        s3_client.download_fileobj(bucket, s3_key, buffer)
-        buffer.seek(0)
-        df = pl.read_parquet(buffer)
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+        s3_client.download_file(bucket, s3_key, tmp_path)
+        df = pl.read_parquet(tmp_path)
         logger.info(f"Loaded s3://{bucket}/{s3_key} successfully")
         return df
 
@@ -122,6 +128,9 @@ def load_data(
     except Exception as e:
         logger.error(f"Failed to read parquet from s3://{bucket}/{s3_key}: {e}")
         raise
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 def polars_info(df: pl.DataFrame) -> pl.DataFrame:
     """
@@ -134,4 +143,3 @@ def polars_info(df: pl.DataFrame) -> pl.DataFrame:
         "n_rows": [df.height] * len(df.columns),
         "n_cols": [df.width] * len(df.columns),
     })
-
