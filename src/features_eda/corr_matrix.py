@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 def generate_corr_matrix(
-    load_file: str,
-    features_bucket: str,
-    features_key: str,
-    output_bucket: str,
+    load_file: str = "features_2020-2024.parquet",
+    features_bucket: str = "sports-betting-ml",
+    features_key: str = "processed/features_2020-2024.parquet",
+    output_bucket: str = "sports-betting-ml",
     output_key: str = "eda/corr_matrix",
     local: bool = True,
     local_path: str = "/tmp",
@@ -40,7 +40,7 @@ def generate_corr_matrix(
     local_file = os.path.join(local_path, filename)
 
     # Load features (polars) then convert to pandas for plotting
-    logger.info("Loading features data from S3 for correlation matrix")
+    logger.info("Loading features data from S3 for correlation matrix: s3://%s/%s/%s", features_bucket, features_key, load_file)
     features_df = load_data(filename=load_file, bucket=features_bucket, key=features_key)
     pdf = features_df.to_pandas() if isinstance(features_df, pl.DataFrame) else pd.DataFrame(features_df)
 
@@ -78,12 +78,4 @@ def generate_corr_matrix(
 
 
 if __name__ == "__main__":
-    generate_corr_matrix(
-        load_file="2020_pbp_data.parquet",
-        features_bucket="sports-betting-ml",
-        features_key="processed/features_2020.parquet",
-        output_bucket="sports-betting-ml",
-        output_key="eda/corr_matrix",
-        local=True,
-        local_path="/tmp",
-    )
+    generate_corr_matrix()

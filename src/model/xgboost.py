@@ -41,17 +41,18 @@ logger = logging.getLogger(__name__)
 def load_feature_dataset(
     year: int = 2020,
     bucket: str = "sports-betting-ml",
-    output_key_template: str = "processed/features_{year}.parquet",
-    filename: str = "2020_pbp_data.parquet",
+    output_key_template: str = "processed/features_2020-2024.parquet",
+    filename: str = "features_2020-2024.parquet",
     local: bool = False,
     local_path: Optional[str] = None,
 ) -> pl.DataFrame:
     """
     Load the processed feature dataset that was written by the feature_engineering CLI.
 
-    The defaults mirror the CLI options shown in feature_engineering.py so this will
-    load from s3://sports-betting-ml/processed/features_{year}.parquet/<filename>.
-    Set local=True and provide local_path to read from disk instead.
+    Defaults point to the combined feature set written as features_2020-2024.parquet:
+    s3://sports-betting-ml/processed/features_2020-2024.parquet/features_2020-2024.parquet.
+    Set local=True and provide local_path to read from disk instead. If you override
+    output_key_template to include {year}, the year argument will be formatted in.
     """
     key = output_key_template.format(year=year)
     return load_data(bucket=bucket, key=key, filename=filename, local=local, local_path=local_path)
@@ -271,15 +272,15 @@ def evaluate_xgboost_performance(
 
 
 @click.command()
-@click.option("--year", default=2020, show_default=True, type=int, help="Feature set year.")
+@click.option("--year", default=2020, show_default=True, type=int, help="Feature set year (if key template uses it).")
 @click.option("--bucket", default="sports-betting-ml", show_default=True, help="S3 bucket for features.")
 @click.option(
     "--output-key-template",
-    default="processed/features_{year}.parquet",
+    default="processed/features_2020-2024.parquet",
     show_default=True,
     help="S3 key template for features parquet.",
 )
-@click.option("--filename", default="2020_pbp_data.parquet", show_default=True, help="Features filename.")
+@click.option("--filename", default="features_2020-2024.parquet", show_default=True, help="Features filename.")
 @click.option("--local", is_flag=True, help="Load features from local_path instead of S3.")
 @click.option("--local-path", default=None, type=str, help="Local directory containing features file.")
 @click.option("--lower", default=0.01, show_default=True, type=float, help="Lower quantile for winsorizing.")
