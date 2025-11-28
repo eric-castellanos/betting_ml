@@ -1,5 +1,5 @@
 """
-Helpers for fetching and preparing feature data for the xgboost model.
+Leak-free training and evaluation pipeline for XGBoost using Polars features.
 """
 
 from typing import Optional
@@ -46,6 +46,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
 
 def drop_score_columns(df: pl.DataFrame) -> pl.DataFrame:
     score_cols = {
@@ -105,6 +106,7 @@ def time_based_train_test_split(
 
     return train_df, test_df
 
+
 def load_feature_dataset(
     year: int = 2020,
     bucket: str = "sports-betting-ml",
@@ -113,14 +115,6 @@ def load_feature_dataset(
     local: bool = False,
     local_path: Optional[str] = None,
 ) -> pl.DataFrame:
-    """
-    Load the processed feature dataset that was written by the feature_engineering CLI.
-
-    Defaults point to the combined feature set written as features_2020-2024.parquet:
-    s3://sports-betting-ml/processed/features_2020-2024.parquet/features_2020-2024.parquet.
-    Set local=True and provide local_path to read from disk instead. If you override
-    output_key_template to include {year}, the year argument will be formatted in.
-    """
     key = output_key_template.format(year=year)
     return load_data(bucket=bucket, key=key, filename=filename, local=local, local_path=local_path)
 
@@ -239,6 +233,7 @@ def prepare_model_data(df: pl.DataFrame, target: str) -> tuple[pl.DataFrame, np.
     )
     return X, y
 
+
 def train_xgboost_model(X, y, params) -> XGBRegressor:
     model = XGBRegressor(**params)
     logger.info(
@@ -257,10 +252,6 @@ def evaluate_xgboost_performance(
     is_home_col: str,
     logger: logging.Logger,
 ) -> None:
-    """
-    Evaluate team-level and game-level (betting) metrics for an XGBoost regression model.
-    """
-    # Team-level metrics
     y_true = df[target_col].to_numpy()
     y_pred = np.asarray(predictions)
     team_mask = np.isfinite(y_true) & np.isfinite(y_pred)
@@ -270,7 +261,6 @@ def evaluate_xgboost_performance(
     team_rmse = mean_squared_error(y_true_f, y_pred_f) ** 0.5
     team_r2 = r2_score(y_true_f, y_pred_f) if len(y_true_f) > 1 else float("nan")
 
-    # Game-level metrics
     game_view = (
         df.select(
             [
@@ -321,7 +311,6 @@ def evaluate_xgboost_performance(
         "num_games": int(game_view.height),
         "num_rows": int(df.height),
     }
-    # Log both in the message (for stdout visibility) and keep structured payload in extra.
     logger.info("XGBoost performance metrics: %s", metrics_payload, extra=metrics_payload)
 
 
@@ -449,6 +438,7 @@ def main(
     except Exception:
         logger.exception("Failed to load or winsorize features")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
