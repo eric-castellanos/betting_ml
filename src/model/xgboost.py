@@ -10,8 +10,7 @@ import click
 import numpy as np
 import polars as pl
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
-from xgboost import XGBClassifier, XGBRegressor
+from xgboost import XGBRegressor
 
 from src.utils.utils import load_data
 
@@ -30,6 +29,16 @@ DEFAULT_WINSOR_COLS = [
     "rush_yards_avg",
 ]
 
+DEFAULT_XGB_PARAMS = {
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "max_depth": 6,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "random_state": 42,
+    "n_jobs": -1,
+}
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -37,6 +46,64 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def drop_score_columns(df: pl.DataFrame) -> pl.DataFrame:
+    score_cols = {
+        "final_home_score",
+        "final_away_score",
+        "home_score",
+        "away_score",
+        "posteam_score",
+        "defteam_score",
+        "score_differential",
+        "score_differential_post",
+    }
+    to_drop = [c for c in score_cols if c in df.columns and c != "points_scored"]
+    return df.drop(to_drop) if to_drop else df.clone()
+
+
+def create_points_scored_target(df: pl.DataFrame, is_home_col: str) -> pl.DataFrame:
+    if is_home_col not in df.columns:
+        raise ValueError(f"Column '{is_home_col}' not found in DataFrame.")
+    return df.with_columns(
+        pl.when(pl.col(is_home_col) == 1)
+        .then(pl.col("final_home_score"))
+        .otherwise(pl.col("final_away_score"))
+        .alias("points_scored")
+    )
+
+
+def time_based_train_test_split(
+    df: pl.DataFrame,
+    season_col: str,
+    cutoff_season: int,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    if season_col not in df.columns:
+        raise ValueError(f"Column '{season_col}' not found in DataFrame.")
+
+    train_df = df.filter(pl.col(season_col) < cutoff_season)
+    test_df = df.filter(pl.col(season_col) == cutoff_season)
+
+    if train_df.height == 0:
+        raise ValueError(f"No training rows found for seasons < {cutoff_season}.")
+    if test_df.height == 0:
+        raise ValueError(f"No test rows found for season == {cutoff_season}.")
+
+    train_seasons = sorted(train_df.select(pl.col(season_col).unique()).to_series().to_list())
+    test_seasons = sorted(test_df.select(pl.col(season_col).unique()).to_series().to_list())
+
+    logger.info(
+        "Time-based split complete",
+        extra={
+            "cutoff_season": cutoff_season,
+            "train_rows": train_df.height,
+            "test_rows": test_df.height,
+            "train_seasons": train_seasons,
+            "test_seasons": test_seasons,
+        },
+    )
+
+    return train_df, test_df
 
 def load_feature_dataset(
     year: int = 2020,
@@ -58,141 +125,128 @@ def load_feature_dataset(
     return load_data(bucket=bucket, key=key, filename=filename, local=local, local_path=local_path)
 
 
-def winsorize_features(
-    df: pl.DataFrame,
+def winsorize_train_and_apply_to_test(
+    train_df: pl.DataFrame,
+    test_df: pl.DataFrame,
     cols: list[str],
-    lower: float = 0.01,
-    upper: float = 0.99,
-) -> pl.DataFrame:
-    """
-    Winsorize selected feature columns at the given lower/upper quantiles.
-    Missing columns are ignored.
-    """
+    lower: float,
+    upper: float,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     if not (0.0 <= lower < upper <= 1.0):
         raise ValueError(f"Invalid quantile bounds: lower={lower}, upper={upper}")
 
-    present = [c for c in cols if c in df.columns]
-
+    present = [c for c in cols if c in train_df.columns]
     if not present:
-        logger.warning("No winsorization columns present; returning original DataFrame.")
-        return df
+        logger.info("No winsorization columns present", extra={"lower": lower, "upper": upper})
+        return train_df.clone(), test_df.clone()
 
-    bounds = df.select(
+    bounds = train_df.select(
         [pl.col(c).quantile(lower).alias(f"{c}_low") for c in present]
         + [pl.col(c).quantile(upper).alias(f"{c}_high") for c in present]
     ).to_dict(as_series=False)
 
-    out = df
+    train_out = train_df
+    test_out = test_df
 
     for c in present:
         low = bounds[f"{c}_low"][0]
         high = bounds[f"{c}_high"][0]
-        out = out.with_columns(pl.col(c).clip(low, high))
+        train_out = train_out.with_columns(pl.col(c).clip(low, high))
+        if c in test_out.columns:
+            test_out = test_out.with_columns(pl.col(c).clip(low, high))
 
     logger.info(
-        "Winsorized columns=%s (lower=%.3f, upper=%.3f)",
-        present,
-        lower,
-        upper,
+        "Winsorized train/test",
+        extra={"columns": present, "lower": lower, "upper": upper},
     )
 
-    return out
+    return train_out, test_out
 
 
-def encode_categoricals(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Encode categorical fields for model input.
-    """
-    roof_cols = ["roof_type"]
-    roof_present = [c for c in roof_cols if c in df.columns]
+def encode_categoricals_train_and_apply_to_test(
+    train_df: pl.DataFrame,
+    test_df: pl.DataFrame,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    def build_base(df: pl.DataFrame) -> pl.DataFrame:
+        cols = [pl.col("posteam").cast(pl.Categorical).to_physical().alias("posteam")]
+        if "home_away_flag" in df.columns:
+            cols.append((pl.col("home_away_flag") == "home").cast(pl.Int8).alias("is_home"))
+        elif "is_home" in df.columns:
+            cols.append(pl.col("is_home").cast(pl.Int8).alias("is_home"))
+        else:
+            raise ValueError("Missing home indicator: expected 'home_away_flag' or 'is_home'.")
+        if "surface" in df.columns:
+            cols.append((pl.col("surface") == "turf").cast(pl.Int8).alias("is_turf"))
+        return df.with_columns(cols).drop(["home_away_flag", "surface"], strict=False)
 
-    base = (
-        df.with_columns(
-            [
-                pl.col("posteam").cast(pl.Categorical).to_physical().alias("posteam"),
-                (pl.col("home_away_flag") == "home").cast(pl.Int8).alias("is_home"),
-                (pl.col("surface") == "turf").cast(pl.Int8).alias("is_turf"),
-                pl.col("roof_type").cast(pl.Categorical),
-            ]
-        )
-        .drop(["home_away_flag", "surface"])
-    )
-    encoded = base.to_dummies(columns=roof_present) if roof_present else base
+    train_base = build_base(train_df)
+    test_base = build_base(test_df)
+
+    roof_categories = [
+        c for c in train_df.select(pl.col("roof_type").unique()).to_series().to_list() if c is not None
+    ]
+
+    def add_roof_dummies(df: pl.DataFrame, is_train: bool) -> pl.DataFrame:
+        if "roof_type" not in df.columns or not roof_categories:
+            return df.drop("roof_type", strict=False)
+        dummy_cols = [
+            pl.when(pl.col("roof_type") == cat).then(1).otherwise(0).alias(f"roof_type_{cat}")
+            for cat in roof_categories
+        ]
+        if not is_train:
+            unseen = {
+                val for val in df.select(pl.col("roof_type").unique()).to_series().to_list() if val is not None
+            } - set(roof_categories)
+            if unseen:
+                logger.warning("Unseen roof_type categories in test data", extra={"unseen_roof_types": sorted(unseen)})
+        out = df.with_columns(dummy_cols)
+        return out.drop("roof_type", strict=False)
+
+    train_encoded = add_roof_dummies(train_base, is_train=True)
+    test_encoded = add_roof_dummies(test_base, is_train=False)
+
     logger.info(
-        "Encoded categoricals; added dummies for roof and binary flags for home/surface",
-        extra={
-            "posteam_dtype": str(encoded.schema.get("posteam")),
-            "dummy_cols": [c for c in encoded.columns if any(c.startswith(f"{r}_") for r in roof_present)],
-            "binary_cols": ["is_home", "is_turf"],
-        },
+        "Encoded categoricals for train/test",
+        extra={"roof_categories": roof_categories},
     )
-    return encoded
+
+    return train_encoded, test_encoded
 
 
-def prepare_model_data(df: pl.DataFrame, target: str) -> tuple:
-    """
-    Split out features/target for xgboost (Polars is supported directly).
-    """
+def prepare_model_data(df: pl.DataFrame, target: str) -> tuple[pl.DataFrame, np.ndarray]:
     if target not in df.columns:
         raise ValueError(f"Target column '{target}' not found in DataFrame.")
 
-    feature_candidates = df.drop(target)
+    cleaned = drop_score_columns(df)
+    feature_candidates = cleaned.drop(target)
     numeric_types = list(pl.NUMERIC_DTYPES) + [pl.Boolean]
     numeric_cols = feature_candidates.select(pl.col(numeric_types)).columns
-    
+
     if not numeric_cols:
         raise ValueError("No numeric feature columns available for training.")
 
+    dropped_cols = [c for c in feature_candidates.columns if c not in numeric_cols]
     X = feature_candidates.select(numeric_cols)
-    y = df[target]
+    y = cleaned[target].to_numpy()
 
     logger.info(
         "Prepared model data",
         extra={
             "target": target,
-            "n_features": len(numeric_cols),
-            "dropped_cols": [c for c in feature_candidates.columns if c not in numeric_cols],
+            "n_numeric_features": len(numeric_cols),
+            "dropped_columns": dropped_cols,
         },
     )
     return X, y
 
-def train_xgboost_model(
-    X,
-    y,
-    target: str,
-    model_params: Optional[dict] = None,
-):
-    """
-    Train an XGBoost regression model on the provided data.
-    """
-    params = model_params or {
-        "n_estimators": 300,
-        "learning_rate": 0.05,
-        "max_depth": 6,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "random_state": 42,
-        "n_jobs": -1,
-    }
-
+def train_xgboost_model(X, y, params) -> XGBRegressor:
     model = XGBRegressor(**params)
-
-    logger.info("Training xgboost model", extra={"task": "regression", "target": target, "rows": len(X), "features": X.shape[1]})
+    logger.info(
+        "Training xgboost model",
+        extra={"rows": len(X), "features": X.shape[1], "params": params},
+    )
     model.fit(X, y)
     return model
-
-
-def create_points_scored_target(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Derive points_scored per team row: use home_score when is_home==1, otherwise away_score.
-    Returns a new DataFrame without mutating the input.
-    """
-    return df.with_columns(
-        pl.when(pl.col("is_home") == 1)
-        .then(pl.col("final_home_score"))
-        .otherwise(pl.col("final_away_score"))
-        .alias("points_scored")
-    )
 
 
 def evaluate_xgboost_performance(
@@ -271,6 +325,66 @@ def evaluate_xgboost_performance(
     logger.info("XGBoost performance metrics: %s", metrics_payload, extra=metrics_payload)
 
 
+def train_and_evaluate(
+    df: pl.DataFrame,
+    season_col: str,
+    cutoff_season: int,
+    is_home_col: str,
+    winsor_cols: list[str],
+    lower: float,
+    upper: float,
+    logger: logging.Logger,
+) -> None:
+    train_df, test_df = time_based_train_test_split(df, season_col=season_col, cutoff_season=cutoff_season)
+
+    if is_home_col not in train_df.columns:
+        if "home_away_flag" not in train_df.columns or "home_away_flag" not in test_df.columns:
+            raise ValueError(f"Column '{is_home_col}' or 'home_away_flag' not found for target creation.")
+        train_df = train_df.with_columns((pl.col("home_away_flag") == "home").cast(pl.Int8).alias(is_home_col))
+        test_df = test_df.with_columns((pl.col("home_away_flag") == "home").cast(pl.Int8).alias(is_home_col))
+        train_df = train_df.drop("home_away_flag", strict=False)
+        test_df = test_df.drop("home_away_flag", strict=False)
+
+    train_df = create_points_scored_target(train_df, is_home_col=is_home_col)
+    test_df = create_points_scored_target(test_df, is_home_col=is_home_col)
+
+    train_df = drop_score_columns(train_df)
+    test_df = drop_score_columns(test_df)
+
+    train_df, test_df = winsorize_train_and_apply_to_test(train_df, test_df, cols=winsor_cols, lower=lower, upper=upper)
+    train_df, test_df = encode_categoricals_train_and_apply_to_test(train_df, test_df)
+
+    X_train, y_train = prepare_model_data(train_df, "points_scored")
+    X_test, _ = prepare_model_data(test_df, "points_scored")
+
+    X_train_pd = X_train.to_pandas()
+    X_test_pd = X_test.to_pandas()
+
+    model = train_xgboost_model(X_train_pd, y_train, DEFAULT_XGB_PARAMS)
+    preds_train = model.predict(X_train_pd)
+    preds_test = model.predict(X_test_pd)
+
+    logger.info("Evaluating train split", extra={"split": "train"})
+    evaluate_xgboost_performance(
+        train_df,
+        predictions=preds_train,
+        target_col="points_scored",
+        game_id_col="game_id",
+        is_home_col=is_home_col,
+        logger=logger,
+    )
+    logger.info("Evaluating test split", extra={"split": "test"})
+    evaluate_xgboost_performance(
+        test_df,
+        predictions=preds_test,
+        target_col="points_scored",
+        game_id_col="game_id",
+        is_home_col=is_home_col,
+        logger=logger,
+    )
+    logger.info("Training and evaluation complete", extra={"cutoff_season": cutoff_season})
+
+
 @click.command()
 @click.option("--year", default=2020, show_default=True, type=int, help="Feature set year (if key template uses it).")
 @click.option("--bucket", default="sports-betting-ml", show_default=True, help="S3 bucket for features.")
@@ -293,9 +407,9 @@ def evaluate_xgboost_performance(
     show_default=True,
     help="Columns to winsorize; pass multiple --col flags.",
 )
-@click.option("--target", required=True, default="points_scored", show_default=True, help="Target column for training.")
-@click.option("--game-id-col", default="game_id", show_default=True, help="Game identifier column.")
-@click.option("--test-size", default=0.2, show_default=True, type=float, help="Test split size fraction.")
+@click.option("--season-col", default="season_year", show_default=True, help="Season column for time-based split.")
+@click.option("--cutoff-season", default=2024, show_default=True, type=int, help="Cutoff season for test split.")
+@click.option("--is-home-col", default="is_home", show_default=True, help="Column indicating home team flag.")
 def main(
     year: int,
     bucket: str,
@@ -306,12 +420,12 @@ def main(
     lower: float,
     upper: float,
     cols: tuple[str, ...],
-    target: str,
-    game_id_col: str,
-    test_size: float,
+    season_col: str,
+    cutoff_season: int,
+    is_home_col: str,
 ) -> None:
     """
-    CLI to load features and winsorize selected columns.
+    CLI to run leak-free time-based training and evaluation.
     """
     try:
         features_df = load_feature_dataset(
@@ -322,48 +436,19 @@ def main(
             local=local,
             local_path=local_path,
         )
-        winsorized = winsorize_features(features_df, list(cols), lower=lower, upper=upper)
-        encoded = encode_categoricals(winsorized)
-        with_target = create_points_scored_target(encoded) if target == "points_scored" else encoded
-        X, y = prepare_model_data(with_target, target)
-
-        indices = np.arange(len(with_target))
-        train_idx, test_idx = train_test_split(indices, test_size=test_size, random_state=42, shuffle=True)
-
-        X_train = X[train_idx].to_pandas()
-        X_test = X[test_idx].to_pandas()
-        y_train = y[train_idx].to_numpy()
-        y_test = y[test_idx].to_numpy()
-        test_df = with_target[test_idx]
-        train_df = with_target[train_idx]
-
-        model = train_xgboost_model(X_train, y_train, target=target)
-        preds_train = model.predict(X_train)
-        preds_test = model.predict(X_test)
-
-        logger.info("Logging training performance metrics")
-        evaluate_xgboost_performance(
-            train_df,
-            predictions=preds_train,
-            target_col=target,
-            game_id_col=game_id_col,
-            is_home_col="is_home",
+        train_and_evaluate(
+            df=features_df,
+            season_col=season_col,
+            cutoff_season=cutoff_season,
+            is_home_col=is_home_col,
+            winsor_cols=list(cols),
+            lower=lower,
+            upper=upper,
             logger=logger,
         )
-        logger.info("Logging test performance metrics")
-        evaluate_xgboost_performance(
-            test_df,
-            predictions=preds_test,
-            target_col=target,
-            game_id_col=game_id_col,
-            is_home_col="is_home",
-            logger=logger,
-        )
-        logger.info("Training and evaluation complete")
     except Exception:
         logger.exception("Failed to load or winsorize features")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
