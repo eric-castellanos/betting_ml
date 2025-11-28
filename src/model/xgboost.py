@@ -160,21 +160,37 @@ def winsorize_train_and_apply_to_test(
 def encode_categoricals_train_and_apply_to_test(
     train_df: pl.DataFrame,
     test_df: pl.DataFrame,
+    is_home_col: str,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    def build_base(df: pl.DataFrame) -> pl.DataFrame:
-        cols = [pl.col("posteam").cast(pl.Categorical).to_physical().alias("posteam")]
+    team_lookup = pl.DataFrame(
+        {
+            "posteam": train_df.select(pl.col("posteam").unique()).to_series().to_list(),
+            "posteam_id": list(range(len(train_df.select(pl.col("posteam").unique()).to_series().to_list()))),
+        }
+    )
+
+    def build_base(df: pl.DataFrame, split: str) -> pl.DataFrame:
+        cols = []
         if "home_away_flag" in df.columns:
-            cols.append((pl.col("home_away_flag") == "home").cast(pl.Int8).alias("is_home"))
-        elif "is_home" in df.columns:
-            cols.append(pl.col("is_home").cast(pl.Int8).alias("is_home"))
+            cols.append((pl.col("home_away_flag") == "home").cast(pl.Int8).alias(is_home_col))
+        elif is_home_col in df.columns:
+            cols.append(pl.col(is_home_col).cast(pl.Int8).alias(is_home_col))
         else:
-            raise ValueError("Missing home indicator: expected 'home_away_flag' or 'is_home'.")
+            raise ValueError("Missing home indicator: expected 'home_away_flag' or the provided is_home_col.")
         if "surface" in df.columns:
             cols.append((pl.col("surface") == "turf").cast(pl.Int8).alias("is_turf"))
-        return df.with_columns(cols).drop(["home_away_flag", "surface"], strict=False)
+        out = df.with_columns(cols).drop(["home_away_flag", "surface"], strict=False)
+        out = out.join(team_lookup, on="posteam", how="left")
+        if split == "test":
+            unseen_mask = out["posteam_id"].is_null()
+            if unseen_mask.any():
+                unseen = out.filter(unseen_mask).select("posteam").unique().to_series().to_list()
+                logger.warning("Unseen posteam categories in test data", extra={"unseen_posteams": sorted(unseen)})
+            out = out.with_columns(pl.col("posteam_id").fill_null(-1))
+        return out
 
-    train_base = build_base(train_df)
-    test_base = build_base(test_df)
+    train_base = build_base(train_df, split="train")
+    test_base = build_base(test_df, split="test")
 
     roof_categories = [
         c for c in train_df.select(pl.col("roof_type").unique()).to_series().to_list() if c is not None
