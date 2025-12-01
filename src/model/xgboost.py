@@ -2,17 +2,29 @@
 Leak-free training and evaluation pipeline for XGBoost using Polars features.
 """
 
-from typing import Optional
+import json
 import logging
+import os
+import platform
 import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
 import click
+import mlflow
+import mlflow.xgboost
 import numpy as np
+import optuna
 import polars as pl
+import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 
 from src.utils.utils import load_data
+from src.utils.model_utils import save_feature_importance_plot
+from src.utils.optuna.xgb import xgb_objective_factory
+from src.utils.optuna.base import run_study, compute_metrics
 
 DEFAULT_WINSOR_COLS = [
     "success_rate",
@@ -30,11 +42,15 @@ DEFAULT_WINSOR_COLS = [
 ]
 
 DEFAULT_XGB_PARAMS = {
-    "n_estimators": 300,
-    "learning_rate": 0.05,
-    "max_depth": 6,
-    "subsample": 0.8,
-    "colsample_bytree": 0.8,
+    "n_estimators": 736,
+    "learning_rate": 0.010169447982817973,
+    "max_depth": 3,
+    "subsample": 0.6046483846510212,
+    "colsample_bytree": 0.6354945532725483,
+    "min_child_weight": 3,
+    "gamma": 4.640514341164363,
+    "reg_lambda": 4.801569857474743,
+    "reg_alpha": 4.428280402339789,
     "random_state": 42,
     "n_jobs": -1,
 }
@@ -267,15 +283,12 @@ def evaluate_xgboost_performance(
     game_id_col: str,
     is_home_col: str,
     logger: logging.Logger,
-) -> None:
+) -> dict:
     y_true = df[target_col].to_numpy()
     y_pred = np.asarray(predictions)
-    team_mask = np.isfinite(y_true) & np.isfinite(y_pred)
-    y_true_f = y_true[team_mask]
-    y_pred_f = y_pred[team_mask]
-    team_mae = mean_absolute_error(y_true_f, y_pred_f)
-    team_rmse = mean_squared_error(y_true_f, y_pred_f) ** 0.5
-    team_r2 = r2_score(y_true_f, y_pred_f) if len(y_true_f) > 1 else float("nan")
+    mask = np.isfinite(y_true) & np.isfinite(y_pred)
+    y_true_f = y_true[mask]
+    y_pred_f = y_pred[mask]
 
     game_view = (
         df.select(
@@ -295,39 +308,29 @@ def evaluate_xgboost_performance(
                 pl.col(target_col).filter(pl.col(is_home_col) == 0).first().alias("away_actual"),
             ]
         )
+        .drop_nulls()
     )
 
-    game_view = game_view.drop_nulls()
+    home_pred = game_view["home_pred"].to_numpy()
+    away_pred = game_view["away_pred"].to_numpy()
+    home_actual = game_view["home_actual"].to_numpy()
+    away_actual = game_view["away_actual"].to_numpy()
 
-    spread_pred = (game_view["home_pred"] - game_view["away_pred"]).to_numpy()
-    spread_actual = (game_view["home_actual"] - game_view["away_actual"]).to_numpy()
-    total_pred = (game_view["home_pred"] + game_view["away_pred"]).to_numpy()
-    total_actual = (game_view["home_actual"] + game_view["away_actual"]).to_numpy()
+    metrics = compute_metrics(
+        y_true_f,
+        y_pred_f,
+        y_true_home=home_actual,
+        y_true_away=away_actual,
+        y_pred_home=home_pred,
+        y_pred_away=away_pred,
+    )
 
-    spread_mask = np.isfinite(spread_pred) & np.isfinite(spread_actual)
-    total_mask = np.isfinite(total_pred) & np.isfinite(total_actual)
-
-    spread_mae = mean_absolute_error(spread_actual[spread_mask], spread_pred[spread_mask])
-    spread_rmse = mean_squared_error(spread_actual[spread_mask], spread_pred[spread_mask]) ** 0.5
-    total_mae = mean_absolute_error(total_actual[total_mask], total_pred[total_mask])
-    total_rmse = mean_squared_error(total_actual[total_mask], total_pred[total_mask]) ** 0.5
-
-    metrics_payload = {
-        "team_metrics": {
-            "mae": float(team_mae),
-            "rmse": float(team_rmse),
-            "r2": float(team_r2),
-        },
-        "betting_metrics": {
-            "spread_mae": float(spread_mae),
-            "spread_rmse": float(spread_rmse),
-            "total_mae": float(total_mae),
-            "total_rmse": float(total_rmse),
-        },
-        "num_games": int(game_view.height),
-        "num_rows": int(df.height),
-    }
-    logger.info("XGBoost performance metrics: %s", metrics_payload, extra=metrics_payload)
+    logger.info(
+        "XGBoost performance metrics: %s",
+        {"metrics": metrics, "num_games": int(game_view.height), "num_rows": int(df.height)},
+        extra={"metrics": metrics, "num_games": int(game_view.height), "num_rows": int(df.height)},
+    )
+    return metrics
 
 
 def train_and_evaluate(
@@ -339,7 +342,9 @@ def train_and_evaluate(
     lower: float,
     upper: float,
     logger: logging.Logger,
-) -> None:
+    tune: bool = False,
+    mlflow_enabled: bool = False,
+) -> dict:
     train_df, test_df = time_based_train_test_split(df, season_col=season_col, cutoff_season=cutoff_season)
 
     if is_home_col not in train_df.columns:
@@ -356,8 +361,11 @@ def train_and_evaluate(
     train_df = drop_score_columns(train_df)
     test_df = drop_score_columns(test_df)
 
-    train_df, test_df = winsorize_train_and_apply_to_test(train_df, test_df, cols=winsor_cols, lower=lower, upper=upper)
-    train_df, test_df = encode_categoricals_train_and_apply_to_test(train_df, test_df)
+    winsor_cols_present = [c for c in winsor_cols if c in train_df.columns]
+    train_df, test_df = winsorize_train_and_apply_to_test(
+        train_df, test_df, cols=winsor_cols, lower=lower, upper=upper
+    )
+    train_df, test_df = encode_categoricals_train_and_apply_to_test(train_df, test_df, is_home_col=is_home_col)
 
     X_train, y_train = prepare_model_data(train_df, "points_scored")
     X_test, _ = prepare_model_data(test_df, "points_scored")
@@ -365,12 +373,55 @@ def train_and_evaluate(
     X_train_pd = X_train.to_pandas()
     X_test_pd = X_test.to_pandas()
 
-    model = train_xgboost_model(X_train_pd, y_train, DEFAULT_XGB_PARAMS)
+    best_params = None
+    best_score = None
+    best_params_path: Path | None = None
+
+    if tune:
+        split_idx = int(0.8 * len(X_train_pd))
+        X_train_tune = X_train_pd.iloc[:split_idx]
+        y_train_tune = y_train[:split_idx]
+        X_val_tune = X_train_pd.iloc[split_idx:]
+        y_val_tune = y_train[split_idx:]
+
+        train_df_tune = train_df.slice(0, split_idx)
+        val_df_tune = train_df.slice(split_idx)
+
+        objective = xgb_objective_factory(
+            X_train_tune,
+            y_train_tune,
+            X_val_tune,
+            y_val_tune,
+            train_df_tune,
+            val_df_tune,
+            target_col="points_scored",
+            is_home_col=is_home_col,
+            mlflow_enabled=mlflow_enabled,
+        )
+
+        best_params, best_score, study = run_study(
+            objective,
+            n_trials=30,
+            study_name="xgb_optuna_search",
+            direction="minimize",
+        )
+
+        best_params_path = Path("artifacts") / "best_params.json"
+        best_params_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(best_params_path, "w", encoding="utf-8") as f:
+            json.dump(best_params, f, indent=2)
+
+        logger.info("Optuna tuning complete", extra={"best_score": best_score, "best_params": best_params})
+        tuned_params = {**DEFAULT_XGB_PARAMS, **best_params}
+        model = train_xgboost_model(X_train_pd, y_train, tuned_params)
+    else:
+        model = train_xgboost_model(X_train_pd, y_train, DEFAULT_XGB_PARAMS)
+
     preds_train = model.predict(X_train_pd)
     preds_test = model.predict(X_test_pd)
 
     logger.info("Evaluating train split", extra={"split": "train"})
-    evaluate_xgboost_performance(
+    train_metrics = evaluate_xgboost_performance(
         train_df,
         predictions=preds_train,
         target_col="points_scored",
@@ -379,7 +430,7 @@ def train_and_evaluate(
         logger=logger,
     )
     logger.info("Evaluating test split", extra={"split": "test"})
-    evaluate_xgboost_performance(
+    test_metrics = evaluate_xgboost_performance(
         test_df,
         predictions=preds_test,
         target_col="points_scored",
@@ -389,6 +440,110 @@ def train_and_evaluate(
     )
     logger.info("Training and evaluation complete", extra={"cutoff_season": cutoff_season})
 
+    feature_count = X_train_pd.shape[1]
+    train_rows = train_df.height
+    test_rows = test_df.height
+    train_split_ratio = train_rows / (train_rows + test_rows)
+
+    importances = model.get_booster().get_score(importance_type="gain")
+    feature_importance_df = (
+        pl.DataFrame({"feature": list(importances.keys()), "importance": list(importances.values())})
+        .sort("importance", descending=True)
+        if importances
+        else pl.DataFrame({"feature": [], "importance": []})
+    )
+
+    feature_plot_path = Path("artifacts") / "feature_importance.png"
+    save_feature_importance_plot(feature_importance_df, str(feature_plot_path))
+
+    return {
+        "model": model,
+        "predictions": {"train": preds_train, "test": preds_test},
+        "metrics": {"train": train_metrics, "test": test_metrics},
+        "feature_importance": feature_importance_df,
+        "feature_plot_path": feature_plot_path,
+        "feature_count": feature_count,
+        "train_rows": train_rows,
+        "test_rows": test_rows,
+        "train_split_ratio": train_split_ratio,
+        "winsor": {"lower": lower, "upper": upper, "columns": winsor_cols_present},
+        "cutoff_season": cutoff_season,
+        "best_params_path": best_params_path,
+        "best_params": best_params,
+        "best_score": best_score,
+    }
+
+
+def log_mlflow_run(results: dict, is_home_col: str) -> None:
+    params_to_log = {**DEFAULT_XGB_PARAMS}
+    if results.get("best_params"):
+        params_to_log.update(results["best_params"])
+    mlflow.log_params(params_to_log)
+    if results.get("best_score") is not None:
+        mlflow.log_metric("optuna_best_mae", results["best_score"])
+
+    mlflow.log_params(
+        {
+            "feature_count": results["feature_count"],
+            "train_rows": results["train_rows"],
+            "test_rows": results["test_rows"],
+            "train_split_ratio": results["train_split_ratio"],
+            "winsor_lower": results["winsor"]["lower"],
+            "winsor_upper": results["winsor"]["upper"],
+            "winsor_columns": ",".join(results["winsor"]["columns"]),
+            "is_home_col": is_home_col,
+            "categorical_encoding": "posteam_id mapping; roof_type one-hot; is_home flag",
+        }
+    )
+
+    metrics = results["metrics"]
+    for split_name, split_metrics in metrics.items():
+        for k, v in split_metrics.items():
+            mlflow.log_metric(f"{split_name}_{k}", v)
+
+    mlflow.log_dict(metrics, "metrics.json")
+
+    n_jobs_param = DEFAULT_XGB_PARAMS.get("n_jobs", 0)
+    cores_used = os.cpu_count() if n_jobs_param == -1 else n_jobs_param
+
+    runtime_info = {
+        "training_timestamp": datetime.utcnow().isoformat() + "Z",
+        "python_version": platform.python_version(),
+        "polars_version": pl.__version__,
+        "xgboost_version": xgb.__version__,
+        "cpu_cores_available": os.cpu_count(),
+        "xgboost_n_jobs": n_jobs_param,
+        "xgboost_cpu_cores_used": cores_used,
+    }
+
+    mlflow.log_params(
+        {
+            "xgboost_cpu_cores_used": runtime_info["xgboost_cpu_cores_used"],
+        }
+    )
+    mlflow.log_dict(runtime_info, "runtime_info.json")
+
+    model_dump = results["model"].get_booster().get_dump()
+    mlflow.log_text("\n".join(model_dump), "model_dump.txt")
+
+    if results.get("best_params_path"):
+        mlflow.log_artifact(str(results["best_params_path"]))
+
+    feature_importance_df = results["feature_importance"]
+    if not feature_importance_df.is_empty():
+        fi_pd = feature_importance_df.to_pandas()
+        try:
+            mlflow.log_table(fi_pd, "feature_importance.json")
+        except AttributeError:
+            csv_path = Path("artifacts") / "feature_importance.csv"
+            csv_path.parent.mkdir(parents=True, exist_ok=True)
+            fi_pd.to_csv(csv_path, index=False)
+            mlflow.log_artifact(str(csv_path))
+
+    if results["feature_plot_path"].exists():
+        mlflow.log_artifact(str(results["feature_plot_path"]))
+
+    mlflow.xgboost.log_model(results["model"], artifact_path="model")
 
 @click.command()
 @click.option("--year", default=2020, show_default=True, type=int, help="Feature set year (if key template uses it).")
@@ -415,6 +570,20 @@ def train_and_evaluate(
 @click.option("--season-col", default="season_year", show_default=True, help="Season column for time-based split.")
 @click.option("--cutoff-season", default=2024, show_default=True, type=int, help="Cutoff season for test split.")
 @click.option("--is-home-col", default="is_home", show_default=True, help="Column indicating home team flag.")
+@click.option(
+    "--mlflow/--no-mlflow",
+    "mlflow_enabled",
+    default=False,
+    show_default=True,
+    help="Enable MLflow experiment tracking.",
+)
+@click.option(
+    "--tune/--no-tune",
+    "tune",
+    default=False,
+    show_default=True,
+    help="Enable Optuna hyperparameter tuning before training.",
+)
 def main(
     year: int,
     bucket: str,
@@ -428,6 +597,8 @@ def main(
     season_col: str,
     cutoff_season: int,
     is_home_col: str,
+    mlflow_enabled: bool,
+    tune: bool,
 ) -> None:
     """
     CLI to run leak-free time-based training and evaluation.
@@ -441,18 +612,37 @@ def main(
             local=local,
             local_path=local_path,
         )
-        train_and_evaluate(
-            df=features_df,
-            season_col=season_col,
-            cutoff_season=cutoff_season,
-            is_home_col=is_home_col,
-            winsor_cols=list(cols),
-            lower=lower,
-            upper=upper,
-            logger=logger,
-        )
+        if mlflow_enabled:
+            mlflow.set_experiment("nfl-xgb")
+            with mlflow.start_run():
+                results = train_and_evaluate(
+                    df=features_df,
+                    season_col=season_col,
+                    cutoff_season=cutoff_season,
+                    is_home_col=is_home_col,
+                    winsor_cols=list(cols),
+                    lower=lower,
+                    upper=upper,
+                    logger=logger,
+                    tune=tune,
+                    mlflow_enabled=mlflow_enabled,
+                )
+                log_mlflow_run(results, is_home_col=is_home_col)
+        else:
+            train_and_evaluate(
+                df=features_df,
+                season_col=season_col,
+                cutoff_season=cutoff_season,
+                is_home_col=is_home_col,
+                winsor_cols=list(cols),
+                lower=lower,
+                upper=upper,
+                logger=logger,
+                tune=tune,
+                mlflow_enabled=mlflow_enabled,
+            )
     except Exception:
-        logger.exception("Failed to load or winsorize features")
+        logger.exception("Failed to load data or train/evaluate model")
         sys.exit(1)
 
 

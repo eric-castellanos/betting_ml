@@ -5,11 +5,21 @@ import tempfile
 
 import polars as pl
 import boto3
+from boto3.session import Session
 from botocore.exceptions import ClientError
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - Line Number %(lineno)d - %(message)s")
 
 logger = logging.getLogger(__name__)
+
+
+def _s3_client():
+    """
+    Build an S3 client honoring AWS_ENDPOINT_URL (for MinIO) if set.
+    """
+    endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
+    session = Session()
+    return session.client("s3", endpoint_url=endpoint_url)
 
 def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[str] = None, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
     """
@@ -26,7 +36,7 @@ def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[
         logger.error("Filename must be provided.")
         return
 
-    s3_client = boto3.client("s3")
+    s3_client = _s3_client()
     s3_key = f"{key}/{filename}"
 
     if local and local_path:
@@ -108,7 +118,7 @@ def load_data(
     # ----------------------------------
     # S3 READ
     # ----------------------------------
-    s3_client = boto3.client("s3")
+    s3_client = _s3_client()
     s3_key = f"{key}/{filename}"
 
     tmp_path = None
