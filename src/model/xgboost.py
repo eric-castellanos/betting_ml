@@ -41,6 +41,7 @@ DEFAULT_WINSOR_COLS = [
     "rush_yards_avg",
 ]
 
+# optimal parameters that minimized test_spread_mae were discovered via MLFlow
 DEFAULT_XGB_PARAMS = {
     "n_estimators": 736,
     "learning_rate": 0.010169447982817973,
@@ -344,6 +345,7 @@ def train_and_evaluate(
     logger: logging.Logger,
     tune: bool = False,
     mlflow_enabled: bool = False,
+    register_model: bool = False,
 ) -> dict:
     train_df, test_df = time_based_train_test_split(df, season_col=season_col, cutoff_season=cutoff_season)
 
@@ -471,6 +473,7 @@ def train_and_evaluate(
         "best_params_path": best_params_path,
         "best_params": best_params,
         "best_score": best_score,
+        "register_model": register_model,
     }
 
 
@@ -543,7 +546,15 @@ def log_mlflow_run(results: dict, is_home_col: str) -> None:
     if results["feature_plot_path"].exists():
         mlflow.log_artifact(str(results["feature_plot_path"]))
 
-    mlflow.xgboost.log_model(results["model"], artifact_path="model")
+    if results.get("register_model"):
+        logger.info("Registering model in MLflow Model Registry...")
+        mlflow.xgboost.log_model(
+            xgb_model=results["model"],
+            artifact_path="model",
+            registered_model_name="nfl_spread_model",
+        )
+    else:
+        logger.info("Model registration disabled; skipping model logging.")
 
 @click.command()
 @click.option("--year", default=2020, show_default=True, type=int, help="Feature set year (if key template uses it).")
@@ -584,6 +595,13 @@ def log_mlflow_run(results: dict, is_home_col: str) -> None:
     show_default=True,
     help="Enable Optuna hyperparameter tuning before training.",
 )
+@click.option(
+    "--register-model/--no-register-model",
+    "register_model",
+    default=False,
+    show_default=True,
+    help="Log and register the trained model in MLflow.",
+)
 def main(
     year: int,
     bucket: str,
@@ -599,6 +617,7 @@ def main(
     is_home_col: str,
     mlflow_enabled: bool,
     tune: bool,
+    register_model: bool,
 ) -> None:
     """
     CLI to run leak-free time-based training and evaluation.
@@ -618,15 +637,16 @@ def main(
                 results = train_and_evaluate(
                     df=features_df,
                     season_col=season_col,
-                    cutoff_season=cutoff_season,
-                    is_home_col=is_home_col,
-                    winsor_cols=list(cols),
-                    lower=lower,
-                    upper=upper,
-                    logger=logger,
-                    tune=tune,
-                    mlflow_enabled=mlflow_enabled,
-                )
+                cutoff_season=cutoff_season,
+                is_home_col=is_home_col,
+                winsor_cols=list(cols),
+                lower=lower,
+                upper=upper,
+                logger=logger,
+                tune=tune,
+                mlflow_enabled=mlflow_enabled,
+                register_model=register_model,
+            )
                 log_mlflow_run(results, is_home_col=is_home_col)
         else:
             train_and_evaluate(
@@ -640,6 +660,7 @@ def main(
                 logger=logger,
                 tune=tune,
                 mlflow_enabled=mlflow_enabled,
+                register_model=register_model,
             )
     except Exception:
         logger.exception("Failed to load data or train/evaluate model")
