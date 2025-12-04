@@ -4,6 +4,7 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+import polars.exceptions as ple
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 import logging
@@ -289,13 +290,14 @@ def evaluate_xgboost_performance(
 
     metrics = {
         "mae": mean_absolute_error(y_true_f, y_pred_f),
-        "rmse": mean_squared_error(y_true_f, y_pred_f, squared=False),
+        # Use explicit square root for compatibility with older sklearn versions lacking squared=False
+        "rmse": mean_squared_error(y_true_f, y_pred_f) ** 0.5,
         "r2": r2_score(y_true_f, y_pred_f) if len(y_true_f) > 1 else float("nan"),
         "spread_mae": mean_absolute_error(home_actual - away_actual, home_pred - away_pred),
         "spread_abs_mae": float(np.mean(np.abs((home_actual - away_actual) - (home_pred - away_pred)))),
-        "spread_rmse": mean_squared_error(home_actual - away_actual, home_pred - away_pred, squared=False),
+        "spread_rmse": mean_squared_error(home_actual - away_actual, home_pred - away_pred) ** 0.5,
         "total_mae": mean_absolute_error(home_actual + away_actual, home_pred + away_pred),
-        "total_rmse": mean_squared_error(home_actual + away_actual, home_pred + away_pred, squared=False),
+        "total_rmse": mean_squared_error(home_actual + away_actual, home_pred + away_pred) ** 0.5,
     }
 
     logger.info(

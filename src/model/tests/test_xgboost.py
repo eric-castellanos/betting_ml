@@ -1,145 +1,95 @@
-# src/model/tests/test_xgboost.py
-"""
-Comprehensive pytest unit tests for NFL sports-betting modeling pipeline using Polars and XGBoost.
-Covers training, metrics, error handling, reproducibility, hyperparameter injection, and MLflow registration.
-"""
+import logging
 
-import pytest
-import polars as pl
 import numpy as np
-from unittest.mock import patch, MagicMock
+import polars as pl
+import polars.exceptions as ple
+import pytest
 
-from src.utils.model_utils import train_xgboost_model
+from src.utils.model_utils import compute_spreads, evaluate_xgboost_performance, train_xgboost_model
 
-REQUIRED_METRIC_KEYS = [
-    "train_spread_rmse",
-    "test_r2",
-    "train_rmse",
-    "train_spread_mae",
-    "train_total_rmse",
-    "test_rmse",
-    "test_spread_abs_mae",
-    "test_total_mae",
-    "train_r2",
-    "train_spread_abs_mae",
-    "test_mae",
-    "test_spread_mae",
-    "test_spread_rmse",
-    "test_total_rmse",
-    "optuna_best_mae",
-    "train_mae",
-    "train_total_mae",
-]
 
 @pytest.fixture
-def synthetic_df():
-    """Fixture: Returns a small synthetic Polars DataFrame for training."""
-    return pl.DataFrame({
-        "feature1": [1, 2, 3, 4, 5],
-        "feature2": [5, 4, 3, 2, 1],
-        "spread": [1.1, 2.2, 3.3, 4.4, 5.5],
-        "total": [10, 20, 30, 40, 50],
-        "target": [2, 4, 6, 8, 10]
-    })
+def simple_training_data():
+    X = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+            [2.0, 0.0],
+        ]
+    )
+    y = np.array([1.0, 2.0, 2.0, 3.0])
+    return X, y
+
 
 @pytest.fixture
-def minimal_df():
-    """Fixture: Returns a minimal Polars DataFrame for metric correctness tests."""
-    return pl.DataFrame({
-        "feature1": [0, 1],
-        "feature2": [1, 0],
-        "spread": [1, 2],
-        "total": [10, 20],
-        "target": [1, 3]
-    })
+def game_df():
+    return pl.DataFrame(
+        {
+            "game_id": [1, 1, 2, 2],
+            "is_home": [1, 0, 1, 0],
+            "points": [24, 17, 30, 20],
+            "final_home_score": [24, 24, 30, 30],
+            "final_away_score": [17, 17, 20, 20],
+        }
+    )
+
 
 @pytest.fixture
-def mock_mlflow():
-    """Fixture: Mocks MLflow logging and registration."""
-    with patch("src.model.xgboost.mlflow") as mock_mlflow_mod:
-        mock_mlflow_mod.log_metric = MagicMock()
-        mock_mlflow_mod.log_params = MagicMock()
-        mock_mlflow_mod.start_run = MagicMock()
-        mock_mlflow_mod.end_run = MagicMock()
-        mock_mlflow_mod.register_model = MagicMock()
-        yield mock_mlflow_mod
-
-@pytest.fixture
-def mock_load_data(synthetic_df):
-    """Fixture: Mocks load_data to return synthetic_df."""
-    with patch("src.utils.utils.load_data", return_value=synthetic_df) as mock_func:
-        yield mock_func
-
-def test_successful_training(mock_load_data, mock_mlflow, synthetic_df):
-    """
-    Test that training runs successfully, returns a model object, and all required metrics.
-    """
-    with patch("src.model.xgboost.mlflow", mock_mlflow):
-        X = synthetic_df.select([col for col in synthetic_df.columns if col not in ["target"]]).to_numpy()
-        y = synthetic_df["target"].to_numpy()
-        params = {"n_estimators": 10, "max_depth": 2}
-        model = train_xgboost_model(X, y, params)
-    assert isinstance(model, object)
-
-def test_metric_correctness(minimal_df, mock_mlflow):
-    """
-    Test that computed metrics (MAE, RMSE, R²) match expected values on a tiny dataset.
-    """
-    with patch("src.utils.utils.load_data", return_value=minimal_df):
-        with patch("src.model.xgboost.mlflow", mock_mlflow):
-            X = minimal_df.select([col for col in minimal_df.columns if col not in ["target"]]).to_numpy()
-            y = minimal_df["target"].to_numpy()
-            params = {"n_estimators": 10, "max_depth": 2}
-            model = train_xgboost_model(X, y, params)
-    y_pred = model.predict(X)
-    mae = np.mean(np.abs(y - y_pred))
-    rmse = np.sqrt(np.mean((y - y_pred) ** 2))
-    r2 = 1 - np.sum((y - y_pred) ** 2) / np.sum((y - np.mean(y)) ** 2)
-    assert np.isclose(mae, mae, atol=1e-2)
-    assert np.isclose(rmse, rmse, atol=1e-2)
-    assert np.isclose(r2, r2, atol=1e-2)
+def game_predictions():
+    return np.array([27.0, 20.0, 28.0, 21.0])
 
 
-def test_model_reproducibility(synthetic_df, mock_mlflow):
-    """
-    Test that model predictions are reproducible with fixed random_state.
-    """
-    with patch("src.utils.utils.load_data", return_value=synthetic_df):
-        with patch("src.model.xgboost.mlflow", mock_mlflow):
-            X = synthetic_df.select(["feature1", "feature2"]).to_numpy()
-            y = synthetic_df["target"].to_numpy()
-            params = {"n_estimators": 10, "max_depth": 2, "random_state": 42}
-            result1 = train_xgboost_model(X, y, params)
-            result2 = train_xgboost_model(X, y, params)
-    preds1 = result1.predict(X)
-    preds2 = result2.predict(X)
-    assert np.allclose(preds1, preds2), "Model predictions are not reproducible"
+def test_train_xgboost_model_trains_and_is_deterministic(simple_training_data):
+    X, y = simple_training_data
+    params = {"n_estimators": 5, "max_depth": 2, "random_state": 0, "verbosity": 0}
 
-def test_hyperparameter_injection(synthetic_df, mock_mlflow):
-    """
-    Test that custom XGBoost parameters override defaults.
-    """
-    custom_params = {"n_estimators": 10, "max_depth": 2}
-    with patch("src.utils.utils.load_data", return_value=synthetic_df):
-        with patch("src.model.xgboost.mlflow", mock_mlflow):
-            X = synthetic_df.select(["feature1", "feature2"]).to_numpy()
-            y = synthetic_df["target"].to_numpy()
-            model = train_xgboost_model(X, y, custom_params)
-    assert hasattr(model, "n_estimators")
-    assert model.n_estimators == 10
-    assert model.max_depth == 2
+    model = train_xgboost_model(X, y, params)
+    preds = model.predict(X)
 
-def test_no_training_when_register_model_false(synthetic_df, mock_mlflow):
-    """
-    Test that MLflow model registration is not called when register_model=False.
-    """
-    with patch("src.utils.utils.load_data", return_value=synthetic_df):
-        with patch("src.model.xgboost.mlflow", mock_mlflow):
-            X = synthetic_df.select(["feature1", "feature2"]).to_numpy()
-            y = synthetic_df["target"].to_numpy()
-            params = {"n_estimators": 10, "max_depth": 2}
-            train_xgboost_model(X, y, params)
-    assert not mock_mlflow.register_model.called, "MLflow register_model should not be called"
+    model_repeat = train_xgboost_model(X, y, params)
+    preds_repeat = model_repeat.predict(X)
 
-# Additional tests for utils should be placed in utils/tests/ as requested.
-# Example: src/utils/tests/test_utils.py
+    assert preds.shape == y.shape
+    assert np.allclose(preds, preds_repeat)
+    assert model.n_estimators == 5
+
+
+def test_evaluate_xgboost_performance_returns_expected_metrics(game_df, game_predictions):
+    logger = logging.getLogger("test-xgb-eval")
+
+    metrics = evaluate_xgboost_performance(
+        game_df,
+        predictions=game_predictions,
+        target_col="points",
+        game_id_col="game_id",
+        is_home_col="is_home",
+        logger=logger,
+    )
+
+    expected_keys = {"mae", "rmse", "r2", "spread_mae", "spread_abs_mae", "spread_rmse", "total_mae", "total_rmse"}
+    assert expected_keys.issubset(metrics)
+    assert metrics["mae"] == pytest.approx(2.25, rel=0.05)
+    assert metrics["spread_mae"] == pytest.approx(1.5, rel=0.05)
+    assert metrics["total_mae"] == pytest.approx(3.5, rel=0.05)
+
+
+def test_compute_spreads_requires_score_columns(game_predictions):
+    df_missing = pl.DataFrame({"game_id": [1], "is_home": [1]})
+    preds = pl.Series("preds", game_predictions[:1])
+
+    with pytest.raises(ple.ColumnNotFoundError):
+        compute_spreads(df_missing, preds, is_home_col="is_home")
+
+
+def test_compute_spreads_adds_predicted_spread(game_df, game_predictions):
+    preds = pl.Series("preds", game_predictions)
+
+    result = compute_spreads(game_df, preds, is_home_col="is_home")
+
+    assert {"predicted_spread", "actual_spread", "actual_total"}.issubset(result.columns)
+
+    game1 = result.filter(pl.col("game_id") == 1)
+    assert float(game1["predicted_spread"][0]) == pytest.approx(7.0)
+    assert float(game1["actual_spread"][0]) == pytest.approx(7.0)
+    assert float(game1["actual_total"][0]) == pytest.approx(41.0)

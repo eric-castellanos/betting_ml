@@ -42,3 +42,13 @@ def test_save_data_s3_uploads_if_not_exists(mock_s3_client):
     mock_s3_client.return_value = mock_client
     utils.save_data(df, bucket="bucket", key="key", filename="file.parquet", local=False)
     mock_client.upload_file.assert_called()
+
+
+def test_load_data_requires_filename():
+    with pytest.raises(ValueError):
+        utils.load_data(local=True, local_path=".")
+
+
+def test_load_data_local_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        utils.load_data(filename="missing.parquet", local=True, local_path=str(tmp_path))
