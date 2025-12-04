@@ -341,6 +341,8 @@ def run(local, year, years, input_path, output_path, filename, bucket, input_key
 
     if years:
         year_list = list(years)
+    elif year:
+        year_list = [year]
     else:
         current_year = datetime.datetime.today().year
         year_list = list(range(2020, current_year))  # default: all available up to last completed season
