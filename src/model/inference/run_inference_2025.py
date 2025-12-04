@@ -100,12 +100,14 @@ def align_features(df: pl.DataFrame, expected_features: list[str]) -> pl.DataFra
 @click.option(
     "--input-path",
     default="data/processed/features_2025.parquet",
+    type=click.Path(path_type=Path),
     show_default=True,
     help="Path to 2025 features parquet.",
 )
 @click.option(
     "--output-path",
     default="data/predictions/predictions_2025.parquet",
+    type=click.Path(path_type=Path),
     show_default=True,
     help="Path to save predictions parquet.",
 )
@@ -115,13 +117,10 @@ def align_features(df: pl.DataFrame, expected_features: list[str]) -> pl.DataFra
     show_default=True,
     help="MLflow model URI to load for inference.",
 )
-def main(input_path: str, output_path: str, model_uri: str) -> None:
+def main(input_path: Path, output_path: Path, model_uri: str) -> None:
     """
     Perform out-of-sample inference on 2025 NFL data using a registered XGBoost model.
     """
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-
     try:
         logger.info("Loading features", extra={"input_path": str(input_path)})
         df = pl.read_parquet(input_path)
