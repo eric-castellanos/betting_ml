@@ -6,3 +6,4 @@ disable =
     E1120,  # no-value-for-parameter
     C0301,  # line too long
     W0621,  # remove error for pytest fixtures
+    R0914, # too-many-locals
