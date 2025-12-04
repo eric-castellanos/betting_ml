@@ -1,6 +1,8 @@
 """ Script for computing features for sports betting ML models """
 
 import logging
+import datetime
+
 import click
 import polars as pl
 import pandera.polars as pa
@@ -185,26 +187,25 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
         for col, alias in columns
     ]
 
+    third_conv = pl.col("third_down_converted").sum()
+    third_fail = pl.col("third_down_failed").sum()
+    fourth_conv = pl.col("fourth_down_converted").sum()
+    fourth_fail = pl.col("fourth_down_failed").sum()
+    total_attempts = third_conv + third_fail + fourth_conv + fourth_fail
+    total_success = third_conv + fourth_conv
+
     custom_aggs = [
         (pl.col("yards_gained") > 15).mean().alias("pct_plays_over_15yds"),
         (pl.col("interception") + pl.col("fumble_lost")).sum().alias("turnover_count"),
-        (
-        pl.when(
-            (pl.col("third_down_converted") + pl.col("third_down_failed") +
-            pl.col("fourth_down_converted") + pl.col("fourth_down_failed")) > 0
-        ).then(
-            (pl.col("third_down_converted") + pl.col("fourth_down_converted")).sum()
-            /
-            (pl.col("third_down_converted") + pl.col("third_down_failed") +
-            pl.col("fourth_down_converted") + pl.col("fourth_down_failed")).sum()
-        ).otherwise(0.0)
-        .alias("third_down_success_rate")
-        ),
+        pl.when(total_attempts > 0)
+        .then(total_success / total_attempts)
+        .otherwise(0.0)
+        .alias("third_down_success_rate"),
     ]
 
     aggs = mean_aggs + sum_aggs + first_aggs + max_aggs + conditional_aggs + custom_aggs
 
-    return df.group_by(["game_id", "posteam"]).agg(aggs)
+    return df.group_by(["season_year", "game_id", "posteam"]).agg(aggs)
 
 
 # -----------------------------
@@ -212,7 +213,7 @@ def compute_team_game_features(df: pl.DataFrame) -> pl.DataFrame:
 # -----------------------------
 def run_feature_engineering(
     local: bool,
-    year: int,
+    years: list[int],
     input_path: str | None,
     output_path: str | None,
     filename: str | None,
@@ -244,18 +245,34 @@ def run_feature_engineering(
         None
     """
 
-    logger.info(f"Starting feature engineering for year={year}, local={local}")
+    logger.info(f"Starting feature engineering for years={years}, local={local}")
 
-    # --- Load data ---
-    if local:
-        if not input_path:
-            raise ValueError("You must provide --input-path when using --local")
-        logger.info(f"Loading local data from: {input_path}")
-        raw = load_data(local=True, filename=filename, local_path=input_path)
-    else:
-        key = input_key_template.format(year=year)
-        logger.info(f"Loading S3 data: s3://{bucket}/{key}")
-        raw = load_data(filename=filename, bucket=bucket, key=key, local=False)
+    # --- Load data across years ---
+    raw_dfs = []
+    for yr in years:
+        current_filename = filename.format(year=yr) if filename and "{year}" in filename else filename
+        if local:
+            if not input_path:
+                raise ValueError("You must provide --input-path when using --local")
+            logger.info(f"Loading local data for year={yr} from: {input_path}")
+            current_raw = load_data(local=True, filename=current_filename, local_path=input_path)
+        else:
+            key = input_key_template.format(year=yr)
+            logger.info(f"Loading S3 data for year={yr}: s3://{bucket}/{key}/{current_filename}")
+            current_raw = load_data(filename=current_filename, bucket=bucket, key=key, local=False)
+
+        current_raw = current_raw.with_columns(pl.lit(yr).alias("season_year"))
+        raw_dfs.append(current_raw)
+
+    raw = pl.concat(raw_dfs, how="vertical")
+    if "game_id" in raw.columns:
+        raw = raw.with_columns(
+            pl.col("game_id")
+            .str.split("_")
+            .list.get(0)
+            .cast(pl.Int32)
+            .alias("season_year")
+        )
 
     # Drop rows missing grouping keys to avoid null groups downstream.
     raw = raw.filter(pl.col("game_id").is_not_null() & pl.col("posteam").is_not_null())
@@ -273,16 +290,18 @@ def run_feature_engineering(
     logger.info(f"Processed dataset info:\n{polars_info(processed)}")
 
     # --- Save output ---
+    year_label = f"{min(years)}" if len(years) == 1 else f"{min(years)}-{max(years)}"
     if local:
         if not output_path:
             raise ValueError("You must provide --output-path when using --local")
-        filename = f"features_{year}.parquet"
-        logger.info(f"Saving processed dataset locally: {filename}")
-        save_data(data=processed, filename=filename, local=True, local_path=output_path)
+        output_filename = f"features_{year_label}.parquet"
+        logger.info(f"Saving processed dataset locally: {output_filename}")
+        save_data(data=processed, filename=output_filename, local=True, local_path=output_path)
     else:
-        key = output_key_template.format(year=year)
+        key = output_key_template.format(year=year_label)
         logger.info(f"Saving processed dataset to S3: s3://{bucket}/{key}")
-        save_data(processed, filename=filename, bucket=bucket, key=key, local=False)
+        output_filename = f"features_{year_label}.parquet"
+        save_data(processed, filename=output_filename, bucket=bucket, key=key, local=False)
 
 # -----------------------------
 #             CLICK CLI
@@ -291,10 +310,16 @@ def run_feature_engineering(
 @click.command()
 @click.option("--local", is_flag=True, help="Run locally instead of using S3")
 @click.option("--year", default=2020, type=int, show_default=True, help="Season year to process")
+@click.option(
+    "--years",
+    multiple=True,
+    type=int,
+    help="Process multiple season years (overrides --year when provided).",
+)
 @click.option("--input-path", type=str, default=None, help="Local input file path")
 @click.option("--output-path", type=str, default=None, help="Local output directory")
 @click.option("--bucket", type=str, default="sports-betting-ml", help="S3 bucket")
-@click.option("--filename", type=str, default="2020_pbp_data.parquet", help="local filename")
+@click.option("--filename", type=str, default="{year}_pbp_data.parquet", help="Input filename (can include {year}).")
 @click.option(
     "--input-key-template",
     default="raw-data",
@@ -308,15 +333,23 @@ def run_feature_engineering(
     help="S3 key template for processed output",
 )
 @click.option("--debug", is_flag=True, help="Enable DEBUG logging")
-def run(local, year, input_path, output_path, filename, bucket, input_key_template, output_key_template, debug):
+def run(local, year, years, input_path, output_path, filename, bucket, input_key_template, output_key_template, debug):
     """Run the end-to-end feature engineering pipeline."""
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
         logger.debug("Debug logging enabled")
 
+    if years:
+        year_list = list(years)
+    elif year:
+        year_list = [year]
+    else:
+        current_year = datetime.datetime.today().year
+        year_list = list(range(2020, current_year))  # default: all available up to last completed season
+
     run_feature_engineering(
         local=local,
-        year=year,
+        years=year_list,
         input_path=input_path,
         output_path=output_path,
         filename=filename,

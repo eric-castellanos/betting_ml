@@ -4,12 +4,8 @@ from datetime import datetime
 import os
 
 from ydata_profiling import ProfileReport
-from ydata_profiling.config import Settings
-import matplotlib.font_manager as fm
 import polars as pl
-import pandas as pd
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.utils import save_data, load_data
 
@@ -22,7 +18,15 @@ logging.basicConfig(
     ]
 )
 
-def generate_features_eda_report(load_file: str, features_bucket: str, features_key: str, report_bucket: str, report_key: str, local: bool = True, local_path: str = "/tmp"):
+def generate_features_eda_report(
+    load_file: str = "features_2020-2024.parquet",
+    features_bucket: str = "sports-betting-ml",
+    features_key: str = "processed/features_2020-2024.parquet",
+    report_bucket: str = "sports-betting-ml",
+    report_key: str = "eda/reports",
+    local: bool = True,
+    local_path: str = "/tmp",
+):
     """
     Load featurees data from S3, generate an EDA report, and save it locally and/or to S3.
     Args:
@@ -41,7 +45,7 @@ def generate_features_eda_report(load_file: str, features_bucket: str, features_
     local_file = os.path.join(local_path, filename)
 
     try:
-        logging.info(f"Loading features data from S3: s3://{features_bucket}/{features_key}")
+        logging.info(f"Loading features data from S3: s3://{features_bucket}/{features_key}/{load_file}")
         # loaded object should always be a polars dataframe
         df = load_data(filename=load_file, bucket=features_bucket, key=features_key).to_pandas()
 
@@ -79,4 +83,4 @@ def generate_features_eda_report(load_file: str, features_bucket: str, features_
         raise
 
 if __name__ == "__main__":
-    generate_features_eda_report(load_file = "2020_pbp_data.parquet", features_bucket="sports-betting-ml", features_key="processed/features_2020.parquet", report_bucket="sports-betting-ml", report_key="eda/reports", local=True)
+    generate_features_eda_report()

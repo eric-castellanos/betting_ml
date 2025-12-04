@@ -19,6 +19,8 @@ def pbp_df():
         "game_id": ["G1", "G1", "G1", "G1"],
         "posteam": ["BUF", "BUF", "KC", "KC"],
 
+        "season_year": [2020, 2020, 2020, 2020],
+
         "epa": [1.0, -0.5, 0.3, 0.1],
         "success": [1, 0, 1, 0],
         "yards_gained": [20, 3, 17, -2],
@@ -193,8 +195,8 @@ def test_compute_team_game_features_basic(pbp_df):
 def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mock_team_schema): # pylint: disable=W0613
     """Test the Click CLI (run) success path."""
 
-    mock_load.return_value = pl.DataFrame({"game_id": [], "posteam": []})
-    mock_compute.return_value = pl.DataFrame({"game_id": ["G1"], "posteam": ["BUF"]})
+    mock_load.return_value = pl.DataFrame({"game_id": ["2020_1"], "posteam": ["BUF"], "season_year": [2020]})
+    mock_compute.return_value = pl.DataFrame({"game_id": ["2020_1"], "posteam": ["BUF"], "season_year": [2020]})
 
     runner = CliRunner()
     result = runner.invoke(
@@ -209,7 +211,7 @@ def test_run_cli_success(mock_compute, mock_save, mock_load, mock_raw_schema, mo
     )
 
     assert result.exit_code == 0
-    mock_load.assert_called_once()
+    mock_load.assert_called()
     mock_compute.assert_called_once()
     mock_save.assert_called_once()
 

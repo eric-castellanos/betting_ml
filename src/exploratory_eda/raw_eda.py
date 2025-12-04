@@ -4,12 +4,8 @@ from datetime import datetime
 import os
 
 from ydata_profiling import ProfileReport
-from ydata_profiling.config import Settings
-import matplotlib.font_manager as fm
 import polars as pl
-import pandas as pd
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
 
 from src.utils.utils import save_data, load_data
 
