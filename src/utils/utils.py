@@ -4,7 +4,6 @@ import os
 import tempfile
 
 import polars as pl
-import boto3
 from boto3.session import Session
 from botocore.exceptions import ClientError
 

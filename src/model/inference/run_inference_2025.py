@@ -1,7 +1,5 @@
 """Run out-of-sample inference on 2025 NFL data using a registered XGBoost model."""
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import Optional

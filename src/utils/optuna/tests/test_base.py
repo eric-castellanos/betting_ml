@@ -1,7 +1,6 @@
 """
 Unit tests for src/utils/optuna/base.py
 """
-import pytest
 import numpy as np
 from src.utils.optuna import base
 

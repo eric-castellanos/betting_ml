@@ -4,7 +4,7 @@ import polars as pl
 import mlflow
 from xgboost import XGBRegressor
 
-from src.utils.optuna.base import compute_metrics, log_trial_to_mlflow
+from src.utils.optuna.base import compute_metrics
 
 
 def xgb_search_space(trial: optuna.trial.Trial) -> dict:

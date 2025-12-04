@@ -1,7 +1,6 @@
 """
 Unit tests for src/utils/optuna/xgb.py
 """
-import pytest
 import numpy as np
 import polars as pl
 from src.utils.optuna import xgb

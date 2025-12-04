@@ -1,7 +1,6 @@
 """
 Unit tests for src/utils/profile_utils.py
 """
-import pytest
 import types
 from src.utils import profile_utils
 

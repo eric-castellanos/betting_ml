@@ -14,12 +14,8 @@ from typing import Optional
 import click
 import mlflow
 import mlflow.xgboost
-import numpy as np
-import optuna
 import polars as pl
 import xgboost as xgb
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from xgboost import XGBRegressor
 
 from src.utils.utils import load_data
 from src.utils.model_utils import (
@@ -34,7 +30,7 @@ from src.utils.model_utils import (
     evaluate_xgboost_performance,
 )
 from src.utils.optuna.xgb import xgb_objective_factory
-from src.utils.optuna.base import run_study, compute_metrics
+from src.utils.optuna.base import run_study
 
 DEFAULT_WINSOR_COLS = [
     "success_rate",
