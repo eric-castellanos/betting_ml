@@ -1,13 +1,22 @@
+"""Placeholder feature generation for inference."""
+
 from datetime import datetime
 
 from src.inference_service.schemas import PredictionRequest
 
 
+def _numeric_hash(value: str | None) -> float:
+    """Stable-ish numeric hash for string values; keeps output deterministic within a run."""
+    if value is None:
+        return 0.0
+    return float(abs(hash(value)) % 1000)
+
+
 def build_dummy_features(request: PredictionRequest) -> dict:
     """
     Build placeholder numeric features that match the XGBoost model inputs.
-    The request's team/location fields are accepted for future feature engineering
-    but are not used by the current dummy feature set.
+    Team and location fields are folded into simple numeric placeholders until
+    real feature engineering is wired in.
     """
     current_year = datetime.utcnow().year
     roof_outdoors = 1.0  # assume outdoor stadium if unknown
@@ -33,7 +42,7 @@ def build_dummy_features(request: PredictionRequest) -> dict:
         "third_down_success_rate": 0.0,
         "is_home": 1.0,
         "is_turf": 0.0,
-        "posteam_id": 0.0,
+        "posteam_id": _numeric_hash(request.home_team),
         "roof_type_open": 0.0,
         "roof_type_closed": 0.0,
         "roof_type_dome": 0.0,

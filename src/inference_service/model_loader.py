@@ -1,3 +1,5 @@
+"""Model loading and prediction utilities for the inference service."""
+
 import logging
 import os
 from typing import Any
@@ -14,11 +16,21 @@ DEFAULT_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/nfl_spread_model/1")
 
 
 class DummyModel:
+    """Fallback model used when MLflow loading fails."""
+
+    # pylint: disable=too-few-public-methods
     def predict(self, df: pd.DataFrame) -> list[float]:
+        """Return zeroed predictions for a given dataframe."""
         return [0.0 for _ in range(len(df))]
 
 
 def load_model(model_uri: str = DEFAULT_MODEL_URI) -> Any:
+    """
+    Load an MLflow model; return a dummy model on failure.
+
+    Broad exceptions are intentional to avoid breaking the service on startup.
+    """
+    # pylint: disable=broad-exception-caught
     try:
         logger.info("Loading MLflow model", extra={"model_uri": model_uri})
         model = mlflow.pyfunc.load_model(model_uri)
@@ -29,6 +41,8 @@ def load_model(model_uri: str = DEFAULT_MODEL_URI) -> Any:
 
 
 def _model_version(model: Any) -> str:
+    """Extract a model version identifier (run_id) when available."""
+    # pylint: disable=broad-exception-caught
     try:
         metadata = getattr(model, "metadata", None)
         run_id = getattr(metadata, "run_id", None)
@@ -40,8 +54,14 @@ def _model_version(model: Any) -> str:
 
 
 def predict(model: Any, payload: PredictionRequest) -> PredictionResponse:
+    """
+    Run prediction for a validated request payload.
+
+    Feature names are aligned to the XGBoost booster when available.
+    """
     features = build_dummy_features(payload)
     expected_cols: list[str] | None = None
+    # pylint: disable=protected-access,broad-exception-caught
     try:
         expected_cols = model._model_impl.xgb_model.get_booster().feature_names
     except Exception:
