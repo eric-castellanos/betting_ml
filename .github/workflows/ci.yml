@@ -3,8 +3,6 @@ on:
     branches:
       - "main"
       - "feature/*"
-      - "feature_engineering"
-      - "create_actions_workflow"
 
 permissions:
   contents: write
@@ -44,10 +42,11 @@ jobs:
 
       - name: Install dependencies
         if: steps.poetry-cache.outputs.cache-hit != 'true'
-        run: poetry install --with ci --no-interaction --no-root
+        run: poetry install --with ci,endpoint --no-interaction --no-root
 
       - name: Run Unit Tests
         run: poetry run pytest src
+
 
       - name: Run mypy
         run: poetry run mypy src
