@@ -63,3 +63,12 @@ scikit-learn = "^1.4.0"
 mlflow = "2.14.3"
 setuptools = "^75.0.0"
 optuna = "^3.6.1"
+
+[tool.poetry.group.endpoint]
+optional = true
+
+[tool.poetry.group.endpoint.dependencies]
+fastapi = "^0.115.0"
+uvicorn = "^0.30.0"
+mlflow = "^2.14.0"
+pydantic = "^2.8.0"

@@ -41,7 +41,17 @@ def _model_version(model: Any) -> str:
 
 def predict(model: Any, payload: PredictionRequest) -> PredictionResponse:
     features = build_dummy_features(payload)
+    expected_cols: list[str] | None = None
+    try:
+        expected_cols = model._model_impl.xgb_model.get_booster().feature_names
+    except Exception:
+        expected_cols = None
+
     df = pd.DataFrame([features])
+    if expected_cols:
+        df = df.reindex(columns=expected_cols, fill_value=0.0)
+    df = df.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+
     preds = model.predict(df)
     predicted_spread = float(preds[0]) if len(preds) else 0.0
 

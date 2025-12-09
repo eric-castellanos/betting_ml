@@ -3,6 +3,8 @@ version: "3.9"
 services:
   postgres:
     image: postgres:14
+    networks:
+      - mlflow-net
     env_file:
       - .env
     environment:
@@ -20,6 +22,8 @@ services:
 
   minio:
     image: minio/minio
+    networks:
+      - mlflow-net
     env_file:
       - .env
     environment:
@@ -42,6 +46,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    networks:
+      - mlflow-net
     env_file:
       - .env
     ports:
@@ -72,6 +78,30 @@ services:
       --port 5000
     restart: unless-stopped
 
+  inference:
+    build:
+      context: .
+      dockerfile: src/inference/Dockerfile
+    networks:
+      - mlflow-net
+    env_file:
+      - .env
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_MODEL_URI: models:/nfl_spread_model/1
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+      AWS_ACCESS_KEY_ID: ${MINIO_AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_AWS_SECRET_ACCESS_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:
+
+networks:
+  mlflow-net:
