@@ -25,7 +25,6 @@ pylint = "3.3.9"
 coverage = "7.10.7"
 pyinstrument = "5.1.1"
 pandas-stubs = "^2.0"
-fastapi = "^0.115.0"
 
 [tool.poetry.group.fetch-data.dependencies]
 polars = "1.30.0"
