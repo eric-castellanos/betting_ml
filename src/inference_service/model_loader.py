@@ -35,7 +35,7 @@ def _model_version(model: Any) -> str:
         if run_id:
             return str(run_id)
     except Exception:
-        pass
+        logger.exception("Failed to extract model version from model metadata")
     return os.getenv("MLFLOW_MODEL_VERSION", "unknown")
 
 
@@ -45,12 +45,25 @@ def predict(model: Any, payload: PredictionRequest) -> PredictionResponse:
     try:
         expected_cols = model._model_impl.xgb_model.get_booster().feature_names
     except Exception:
+        logger.warning("Could not extract feature names from model, proceeding without reindexing")
         expected_cols = None
 
     df = pd.DataFrame([features])
     if expected_cols:
         df = df.reindex(columns=expected_cols, fill_value=0.0)
-    df = df.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    try:
+        df = df.apply(pd.to_numeric, errors="raise")
+    except Exception:
+        logger.exception(
+            "Non-numeric feature values encountered during prediction",
+            extra={
+                "features": {
+                    col: df[col].iloc[0] for col in df.columns if not pd.api.types.is_numeric_dtype(df[col])
+                }
+            },
+        )
+        raise
+    df = df.fillna(0.0)
 
     preds = model.predict(df)
     predicted_spread = float(preds[0]) if len(preds) else 0.0

@@ -6,7 +6,8 @@ from src.inference_service.schemas import PredictionRequest
 def build_dummy_features(request: PredictionRequest) -> dict:
     """
     Build placeholder numeric features that match the XGBoost model inputs.
-    Replace with real feature engineering when available.
+    The request's team/location fields are accepted for future feature engineering
+    but are not used by the current dummy feature set.
     """
     current_year = datetime.utcnow().year
     roof_outdoors = 1.0  # assume outdoor stadium if unknown

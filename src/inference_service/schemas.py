@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PredictionRequest(BaseModel):
@@ -7,6 +7,13 @@ class PredictionRequest(BaseModel):
     game_id: str | None = Field(None, description="Unique game identifier")
     location: str | None = Field(None, description="Location or stadium")
     spread: float | None = Field(None, description="Market spread if available")
+
+    @field_validator("spread")
+    @classmethod
+    def validate_spread(cls, v: float | None) -> float | None:
+        if v is not None and (v < -50 or v > 50):
+            raise ValueError("spread must be between -50 and 50")
+        return v
 
 
 class PredictionResponse(BaseModel):
