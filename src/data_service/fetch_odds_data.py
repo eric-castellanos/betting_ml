@@ -31,7 +31,13 @@ logger = logging.getLogger(__name__)
 
 def fetch_odds(api_key: str, sport: str, markets: list[str], timeout: int) -> Any:
     """Pull spread odds and return the JSON payload."""
-    params = {"apiKey": api_key, "markets": ",".join(markets)}
+    params = {
+        "apiKey": api_key,
+        "markets": ",".join(markets),
+        "regions": "us",
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+    }
     url = API_URL_TEMPLATE.format(sport=sport)
 
     try:
@@ -47,7 +53,12 @@ def fetch_odds(api_key: str, sport: str, markets: list[str], timeout: int) -> An
     if response.status_code != 200:
         logger.error(
             "Non-200 response from The Odds API",
-            extra={"status_code": response.status_code, "body": response.text},
+            extra={
+                "status_code": response.status_code,
+                "body": response.text,
+                "url": response.url,
+                "params": params,
+            },
         )
         sys.exit(1)
 
@@ -108,7 +119,7 @@ def main(
     api_key: Optional[str] = None,
     timeout: int = TIMEOUT,
     bucket: Optional[str] = None,
-    key: Optional[str] = None,
+    key: Optional[str] = "odds_data",
     local: bool = True,
     local_output_dir: Path = OUTPUT_DIR,
     season_year: Optional[int] = None,
@@ -160,9 +171,9 @@ def main(
 )
 @click.option(
     "--key",
-    default=None,
+    default="odds_data",
     show_default=True,
-    help="S3 key prefix for the odds JSON (defaults to the filename if omitted).",
+    help="S3 key prefix for the odds JSON.",
 )
 @click.option(
     "--local/--no-local",
