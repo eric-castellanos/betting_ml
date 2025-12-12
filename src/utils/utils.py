@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Union
+import json
 import logging
 import os
 import tempfile
@@ -20,23 +21,37 @@ def _s3_client():
     session = Session()
     return session.client("s3", endpoint_url=endpoint_url)
 
-def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[str] = None, filename: Optional[str] = None, local: bool = False, local_path : Optional[str] = None) -> None:
+def save_data(
+    data: Union[pl.DataFrame, dict],
+    bucket: Optional[str] = None,
+    key: Optional[str] = None,
+    filename: Optional[str] = None,
+    local: bool = False,
+    local_path: Optional[str] = None,
+    data_format: str = "parquet",
+) -> None:
     """
-    Save data to S3 bucket. If local set to True, save data to a local parquet file.
+    Save data locally or to S3.
+
+    If local is True, data is written locally. Otherwise data is uploaded to S3.
+    Supports parquet (default) or json payloads.
+
     Args:
-		data (dict): Data to save.
+        data (dict or Polars DataFrame): Data to save.
         bucket (str): S3 bucket.
         key (str): file path inside S3 bucket.
-		filename (str): Path to the output file.
-		local (bool): Bool to determine whether or not to save locally.
+        filename (str): Path to the output file.
+        local (bool): Bool to determine whether or not to save locally.
         local_path (str): local filepath to save data to.
+        data_format (str): "parquet" or "json".
 	"""
     if not filename:
         logger.error("Filename must be provided.")
         return
 
     s3_client = _s3_client()
-    s3_key = f"{key}/{filename}"
+    s3_key = f"{key}/{filename}" if key else filename
+    format_lower = data_format.lower()
 
     if local and local_path:
         full_path = os.path.join(local_path, filename)
@@ -45,9 +60,14 @@ def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[
         else:
             os.makedirs(local_path, exist_ok=True)
             logger.info(f"Writing {filename} to local folder: {local_path}")
-            data.write_parquet(full_path)
+            if format_lower == "parquet":
+                data.write_parquet(full_path)  # type: ignore[attr-defined]
+            elif format_lower == "json":
+                with open(full_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            else:
+                raise ValueError(f"Unsupported data_format: {data_format}")
 
-    
     if not local:
         try:
             s3_client.head_object(Bucket=bucket, Key=s3_key)
@@ -65,7 +85,13 @@ def save_data(data: pl.DataFrame, bucket : Optional[str] = None, key : Optional[
         try:
             with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
                 tmp_path = tmp_file.name
-            data.write_parquet(tmp_path)
+            if format_lower == "parquet":
+                data.write_parquet(tmp_path)  # type: ignore[attr-defined]
+            elif format_lower == "json":
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            else:
+                raise ValueError(f"Unsupported data_format: {data_format}")
             logger.info(f"Uploading new file to s3://{bucket}/{s3_key}")
             s3_client.upload_file(tmp_path, bucket, s3_key)
         finally:
